@@ -10,6 +10,12 @@ pub enum TuiMessage {
     PlaybackPause,
     PlaybackResume,
     FileLoaded(FileLoadedData),
+    VolumeUpdate(i64),
+}
+
+pub enum LibMpvMessage {
+    Quit,
+    UpdateVolume(i64),
 }
 
 pub struct FileLoadedData {
@@ -17,6 +23,11 @@ pub struct FileLoadedData {
     duration: f64,
     time_pos: f64,
     volume: i64,
+}
+
+enum TuiCommand {
+    Quit,
+    Volume(i64),
 }
 
 fn main() {
@@ -36,9 +47,17 @@ fn main() {
 }
 
 pub fn tui(
-    libmpv_s: crossbeam::channel::Sender<bool>,
+    libmpv_s: crossbeam::channel::Sender<LibMpvMessage>,
     tui_r: crossbeam::channel::Receiver<TuiMessage>,
 ) {
+    let commands = std::collections::HashMap::from([
+        (KeyCode::Char('q'), TuiCommand::Quit),
+        (KeyCode::Char('{'), TuiCommand::Volume(-1)),
+        (KeyCode::Char('}'), TuiCommand::Volume(1)),
+        (KeyCode::Char('['), TuiCommand::Volume(-10)),
+        (KeyCode::Char(']'), TuiCommand::Volume(10)),
+    ]);
+
     let mut title = String::new();
     let mut terminal = ratatui::init();
 
@@ -82,9 +101,16 @@ pub fn tui(
             if let Ok(event) = event {
                 match event {
                     event::Event::Key(key) => {
-                        if key.code == KeyCode::Char('q') {
-                            libmpv_s.send(true).unwrap();
-                            break;
+                        if let Some(command) = commands.get(&key.code) {
+                            match command {
+                                TuiCommand::Quit => {
+                                    libmpv_s.send(LibMpvMessage::Quit).unwrap();
+                                    break;
+                                }
+                                TuiCommand::Volume(vol) => {
+                                    libmpv_s.send(LibMpvMessage::UpdateVolume(*vol)).unwrap();
+                                }
+                            }
                         }
                     }
                     _ => (),
@@ -116,6 +142,9 @@ pub fn tui(
                     playback_start = std::time::SystemTime::now();
                     playback_paused = false;
                 }
+                TuiMessage::VolumeUpdate(vol) => {
+                    playback_volume = vol;
+                }
             }
         }
     }
@@ -125,7 +154,7 @@ pub fn tui(
 pub fn libmpv(
     path: &str,
     tui_s: crossbeam::channel::Sender<TuiMessage>,
-    libmpv_r: crossbeam::channel::Receiver<bool>,
+    libmpv_r: crossbeam::channel::Receiver<LibMpvMessage>,
 ) {
     let mut mpv_handler = LibMpvHandler::initialize_libmpv(100).unwrap();
     mpv_handler.create_event_context().unwrap();
@@ -137,9 +166,24 @@ pub fn libmpv(
                 .wait_event(0.016)
                 .unwrap_or(Err(libmpv2::Error::Null));
 
-            if let Ok(_) = libmpv_r.try_recv() {
-                mpv_handler.mpv.command("quit", &["0"]).unwrap();
-                break;
+            if let Ok(msg) = libmpv_r.try_recv() {
+                match msg {
+                    LibMpvMessage::Quit => {
+                        mpv_handler.mpv.command("quit", &["0"]).unwrap();
+                        break;
+                    }
+                    LibMpvMessage::UpdateVolume(vol) => {
+                        let mut volume = mpv_handler.mpv.get_property::<i64>("volume").unwrap();
+                        volume += vol;
+                        if volume < 0 {
+                            volume = 0;
+                        }
+                        if volume > 200 {
+                            volume = 200;
+                        }
+                        mpv_handler.mpv.set_property("volume", volume).unwrap();
+                    }
+                }
             }
 
             match ev {
@@ -160,6 +204,13 @@ pub fn libmpv(
                         } else {
                             tui_s.send(TuiMessage::PlaybackResume).unwrap();
                         }
+                    }
+                    libmpv2::events::Event::PropertyChange {
+                        name: "volume",
+                        change: libmpv2::events::PropertyData::Int64(volume),
+                        ..
+                    } => {
+                        tui_s.send(TuiMessage::VolumeUpdate(volume)).unwrap();
                     }
                     libmpv2::events::Event::FileLoaded => {
                         let media_title = mpv_handler
@@ -228,6 +279,7 @@ impl LibMpvHandler {
         ev_ctx.disable_deprecated_events()?;
 
         ev_ctx.observe_property("pause", libmpv2::Format::Flag, 0)?;
+        ev_ctx.observe_property("volume", libmpv2::Format::Int64, 0)?;
 
         self.ev_ctx = Some(ev_ctx);
 

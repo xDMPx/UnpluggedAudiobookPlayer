@@ -18,6 +18,7 @@ pub enum LibMpvMessage {
     Quit,
     UpdateVolume(i64),
     UpdatePosition(f64),
+    PlayPause,
 }
 
 pub struct FileLoadedData {
@@ -31,6 +32,7 @@ enum TuiCommand {
     Quit,
     Volume(i64),
     Seek(f64),
+    PlayPause,
 }
 
 fn main() {
@@ -61,6 +63,7 @@ pub fn tui(
         (KeyCode::Char(']'), TuiCommand::Volume(10)),
         (KeyCode::Left, TuiCommand::Seek(-10.0)),
         (KeyCode::Right, TuiCommand::Seek(10.0)),
+        (KeyCode::Char(' '), TuiCommand::PlayPause),
     ]);
 
     let mut title = String::new();
@@ -119,6 +122,9 @@ pub fn tui(
                                     libmpv_s
                                         .send(LibMpvMessage::UpdatePosition(*offset))
                                         .unwrap();
+                                }
+                                TuiCommand::PlayPause => {
+                                    libmpv_s.send(LibMpvMessage::PlayPause).unwrap();
                                 }
                             }
                         }
@@ -202,6 +208,9 @@ pub fn libmpv(
                             .mpv
                             .command("seek", &[&offset.to_string()])
                             .unwrap();
+                    }
+                    LibMpvMessage::PlayPause => {
+                        mpv_handler.mpv.command("cycle", &["pause"]).unwrap();
                     }
                 }
             }

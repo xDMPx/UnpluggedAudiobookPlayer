@@ -1,4 +1,4 @@
-use ratatui::crossterm::event::{self, KeyCode};
+use ratatui::crossterm::event::{self, KeyCode, KeyEvent};
 use ratatui::{
     DefaultTerminal,
     widgets::{Block, Borders},
@@ -11,11 +11,13 @@ pub enum TuiMessage {
     PlaybackResume,
     FileLoaded(FileLoadedData),
     VolumeUpdate(i64),
+    PositionUpdate(f64),
 }
 
 pub enum LibMpvMessage {
     Quit,
     UpdateVolume(i64),
+    UpdatePosition(f64),
 }
 
 pub struct FileLoadedData {
@@ -28,6 +30,7 @@ pub struct FileLoadedData {
 enum TuiCommand {
     Quit,
     Volume(i64),
+    Seek(f64),
 }
 
 fn main() {
@@ -56,6 +59,8 @@ pub fn tui(
         (KeyCode::Char('}'), TuiCommand::Volume(1)),
         (KeyCode::Char('['), TuiCommand::Volume(-10)),
         (KeyCode::Char(']'), TuiCommand::Volume(10)),
+        (KeyCode::Left, TuiCommand::Seek(-10.0)),
+        (KeyCode::Right, TuiCommand::Seek(10.0)),
     ]);
 
     let mut title = String::new();
@@ -110,6 +115,11 @@ pub fn tui(
                                 TuiCommand::Volume(vol) => {
                                     libmpv_s.send(LibMpvMessage::UpdateVolume(*vol)).unwrap();
                                 }
+                                TuiCommand::Seek(offset) => {
+                                    libmpv_s
+                                        .send(LibMpvMessage::UpdatePosition(*offset))
+                                        .unwrap();
+                                }
                             }
                         }
                     }
@@ -144,6 +154,10 @@ pub fn tui(
                 }
                 TuiMessage::VolumeUpdate(vol) => {
                     playback_volume = vol;
+                }
+                TuiMessage::PositionUpdate(pos) => {
+                    playback_start = std::time::SystemTime::now();
+                    playback_start_offset = pos;
                 }
             }
         }
@@ -183,6 +197,12 @@ pub fn libmpv(
                         }
                         mpv_handler.mpv.set_property("volume", volume).unwrap();
                     }
+                    LibMpvMessage::UpdatePosition(offset) => {
+                        mpv_handler
+                            .mpv
+                            .command("seek", &[&offset.to_string()])
+                            .unwrap();
+                    }
                 }
             }
 
@@ -211,6 +231,13 @@ pub fn libmpv(
                         ..
                     } => {
                         tui_s.send(TuiMessage::VolumeUpdate(volume)).unwrap();
+                    }
+                    libmpv2::events::Event::Seek => {
+                        let time_pos = mpv_handler
+                            .mpv
+                            .get_property::<f64>("time-pos/full")
+                            .unwrap();
+                        tui_s.send(TuiMessage::PositionUpdate(time_pos)).unwrap();
                     }
                     libmpv2::events::Event::FileLoaded => {
                         let media_title = mpv_handler

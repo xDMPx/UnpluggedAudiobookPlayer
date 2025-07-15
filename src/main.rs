@@ -3,6 +3,7 @@ use ratatui::{
     DefaultTerminal,
     widgets::{Block, Borders},
 };
+use std::io::Write;
 
 pub enum TuiMessage {
     StartFile,
@@ -24,7 +25,6 @@ pub enum LibMpvMessage {
 pub struct FileLoadedData {
     media_title: String,
     duration: f64,
-    time_pos: f64,
     volume: i64,
 }
 
@@ -37,6 +37,11 @@ enum TuiCommand {
 
 fn main() {
     let file_path = std::env::args().skip(1).next().expect("Provide file path");
+    let time: f64 = if let Ok(str) = std::fs::read_to_string(format!("{file_path}.txt")) {
+        str.parse().unwrap()
+    } else {
+        0.0
+    };
 
     let (tui_s, tui_r) = crossbeam::channel::unbounded();
     let (libmpv_s, libmpv_r) = crossbeam::channel::unbounded();
@@ -45,7 +50,7 @@ fn main() {
             tui(libmpv_s, tui_r);
         });
         scope.spawn(move |_| {
-            libmpv(&file_path, tui_s, libmpv_r);
+            libmpv(&file_path, time, tui_s, libmpv_r);
         });
     })
     .unwrap();
@@ -145,7 +150,6 @@ pub fn tui(
                 }
                 TuiMessage::FileLoaded(data) => {
                     playback_start = std::time::SystemTime::now();
-                    playback_start_offset = data.time_pos;
                     playback_duration = data.duration.ceil() as u64;
                     playback_volume = data.volume;
                     title = data.media_title;
@@ -173,6 +177,7 @@ pub fn tui(
 
 pub fn libmpv(
     path: &str,
+    time: f64,
     tui_s: crossbeam::channel::Sender<TuiMessage>,
     libmpv_r: crossbeam::channel::Receiver<LibMpvMessage>,
 ) {
@@ -189,6 +194,19 @@ pub fn libmpv(
             if let Ok(msg) = libmpv_r.try_recv() {
                 match msg {
                     LibMpvMessage::Quit => {
+                        let diff = 5.0;
+                        let mut pos = mpv_handler
+                            .mpv
+                            .get_property::<f64>("time-pos/full")
+                            .unwrap_or(0.0);
+                        if pos > diff {
+                            pos -= diff;
+                        } else {
+                            pos = 0.0;
+                        }
+                        let mut file = std::fs::File::create(format!("{path}.txt")).unwrap();
+                        file.write_all(pos.to_string().as_bytes()).unwrap();
+
                         mpv_handler.mpv.command("quit", &["0"]).unwrap();
                         break;
                     }
@@ -258,16 +276,15 @@ pub fn libmpv(
                             .mpv
                             .get_property::<f64>("duration/full")
                             .unwrap();
-                        let time_pos = mpv_handler
+                        mpv_handler
                             .mpv
-                            .get_property::<f64>("time-pos/full")
+                            .command("seek", &[&time.to_string(), "absolute"])
                             .unwrap();
                         let volume = mpv_handler.mpv.get_property::<i64>("volume").unwrap();
                         tui_s
                             .send(TuiMessage::FileLoaded(FileLoadedData {
                                 media_title,
                                 duration,
-                                time_pos,
                                 volume,
                             }))
                             .unwrap();

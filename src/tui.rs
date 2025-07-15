@@ -63,7 +63,7 @@ pub fn tui(
                 playback_start_offset + playback_start.elapsed().unwrap().as_secs_f64()
             }
         };
-        let mut playback_time = playback_time.ceil() as u64;
+        let mut playback_time = playback_time.floor() as u64;
         playback_time = playback_time.min(playback_duration);
         let symbol = {
             if !playback_ready {
@@ -77,7 +77,10 @@ pub fn tui(
         let mut to_draw = title.clone();
         to_draw.push_str(&format!(
             "\n{} {} / {} vol: {}",
-            symbol, playback_time, playback_duration, playback_volume
+            symbol,
+            secs_to_hms(playback_time),
+            secs_to_hms(playback_duration),
+            playback_volume
         ));
         draw(&mut terminal, &to_draw);
 
@@ -122,7 +125,7 @@ pub fn tui(
                 }
                 TuiMessage::FileLoaded(data) => {
                     playback_start = std::time::SystemTime::now();
-                    playback_duration = data.duration.ceil() as u64;
+                    playback_duration = data.duration.floor() as u64;
                     playback_volume = data.volume;
                     title = data.media_title;
                 }
@@ -159,4 +162,12 @@ pub fn draw(terminal: &mut DefaultTerminal, text: &str) {
             f.render_widget(text, inner);
         })
         .unwrap();
+}
+
+fn secs_to_hms(seconds: u64) -> String {
+    let h = seconds / 3600;
+    let m = (seconds - h * 3600) / 60;
+    let s = seconds - h * 3600 - m * 60;
+
+    format!("{h:02}:{m:02}:{s:02}")
 }

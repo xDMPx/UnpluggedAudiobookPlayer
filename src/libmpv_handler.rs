@@ -8,9 +8,16 @@ pub enum LibMpvMessage {
     PlayPause,
 }
 
+#[derive(serde::Deserialize)]
+pub struct Chapter {
+    title: String,
+    time: f32,
+}
+
 pub struct LibMpvHandler {
     mpv: libmpv2::Mpv,
     ev_ctx: Option<libmpv2::events::EventContext>,
+    chapters: Vec<Chapter>,
 }
 
 impl LibMpvHandler {
@@ -19,7 +26,11 @@ impl LibMpvHandler {
         mpv.set_property("volume", volume)?;
         mpv.set_property("vo", "null")?;
 
-        Ok(LibMpvHandler { mpv, ev_ctx: None })
+        Ok(LibMpvHandler {
+            mpv,
+            ev_ctx: None,
+            chapters: vec![],
+        })
     }
 
     pub fn create_event_context(&mut self) -> Result<(), libmpv2::Error> {
@@ -28,6 +39,7 @@ impl LibMpvHandler {
 
         ev_ctx.observe_property("pause", libmpv2::Format::Flag, 0)?;
         ev_ctx.observe_property("volume", libmpv2::Format::Int64, 0)?;
+        ev_ctx.observe_property("chapter", libmpv2::Format::Int64, 0)?;
 
         self.ev_ctx = Some(ev_ctx);
 
@@ -37,6 +49,15 @@ impl LibMpvHandler {
     pub fn load_file(&self, file: &str) -> Result<(), libmpv2::Error> {
         self.mpv
             .command("loadfile", &[format!("\"{file}\"").as_str(), "append-play"])
+    }
+
+    pub fn fech_chapters(&mut self) -> Result<(), libmpv2::Error> {
+        let chapters = self.mpv.get_property::<libmpv2::MpvStr>("chapter-list")?;
+        let chapters: Vec<Chapter> = serde_json::from_str(chapters.trim()).unwrap_or(vec![]);
+
+        self.chapters = chapters;
+
+        Ok(())
     }
 }
 
@@ -124,6 +145,17 @@ pub fn libmpv(
                     } => {
                         tui_s.send(TuiMessage::VolumeUpdate(volume)).unwrap();
                     }
+                    libmpv2::events::Event::PropertyChange {
+                        name: "chapter",
+                        change: libmpv2::events::PropertyData::Int64(i),
+                        ..
+                    } => {
+                        if i >= 0 {
+                            let chapter =
+                                mpv_handler.chapters.get(i as usize).unwrap().title.clone();
+                            tui_s.send(TuiMessage::ChapterUpdate(chapter)).unwrap();
+                        }
+                    }
                     libmpv2::events::Event::Seek => {
                         let time_pos = mpv_handler
                             .mpv
@@ -145,12 +177,21 @@ pub fn libmpv(
                             .mpv
                             .command("seek", &[&time.to_string(), "absolute"])
                             .unwrap();
+                        mpv_handler.fech_chapters().unwrap();
+                        let chapter = mpv_handler.mpv.get_property::<i64>("chapter").unwrap();
+                        let chapter = mpv_handler
+                            .chapters
+                            .get(chapter as usize)
+                            .unwrap()
+                            .title
+                            .clone();
                         let volume = mpv_handler.mpv.get_property::<i64>("volume").unwrap();
                         tui_s
                             .send(TuiMessage::FileLoaded(FileLoadedData {
                                 media_title,
                                 duration,
                                 volume,
+                                chapter,
                             }))
                             .unwrap();
                     }

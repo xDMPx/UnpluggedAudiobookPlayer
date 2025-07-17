@@ -13,6 +13,7 @@ pub enum TuiMessage {
     FileLoaded(FileLoadedData),
     VolumeUpdate(i64),
     PositionUpdate(f64),
+    ChapterUpdate(String),
 }
 
 pub enum TuiCommand {
@@ -26,6 +27,7 @@ pub struct FileLoadedData {
     pub media_title: String,
     pub duration: f64,
     pub volume: i64,
+    pub chapter: String,
 }
 
 pub fn tui(
@@ -44,6 +46,7 @@ pub fn tui(
     ]);
 
     let mut title = String::new();
+    let mut chapter = String::new();
     let mut terminal = ratatui::init();
 
     let mut playback_start = std::time::SystemTime::now();
@@ -76,7 +79,7 @@ pub fn tui(
         };
         let mut to_draw = title.clone();
         to_draw.push_str(&format!(
-            "\n{} {} / {} vol: {}",
+            "\n{chapter}\n{} {} / {} vol: {}",
             symbol,
             secs_to_hms(playback_time),
             secs_to_hms(playback_duration),
@@ -143,6 +146,9 @@ pub fn tui(
                 TuiMessage::PositionUpdate(pos) => {
                     playback_start = std::time::SystemTime::now();
                     playback_start_offset = pos;
+                }
+                TuiMessage::ChapterUpdate(chap) => {
+                    chapter = chap;
                 }
             }
         }

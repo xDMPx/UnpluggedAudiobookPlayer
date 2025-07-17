@@ -6,6 +6,8 @@ pub enum LibMpvMessage {
     UpdateVolume(i64),
     UpdatePosition(f64),
     PlayPause,
+    NextChapter,
+    PrevChapter,
 }
 
 #[derive(serde::Deserialize)]
@@ -115,6 +117,18 @@ pub fn libmpv(
                     }
                     LibMpvMessage::PlayPause => {
                         mpv_handler.mpv.command("cycle", &["pause"]).unwrap();
+                    }
+                    LibMpvMessage::PrevChapter => {
+                        let chapter = mpv_handler.mpv.get_property::<i64>("chapter").unwrap() - 1;
+                        if chapter >= 0 {
+                            mpv_handler.mpv.set_property("chapter", chapter).unwrap();
+                        }
+                    }
+                    LibMpvMessage::NextChapter => {
+                        let chapter = mpv_handler.mpv.get_property::<i64>("chapter").unwrap() + 1;
+                        if chapter < (mpv_handler.chapters.len() as i64) {
+                            mpv_handler.mpv.set_property("chapter", chapter).unwrap();
+                        }
                     }
                 }
             }

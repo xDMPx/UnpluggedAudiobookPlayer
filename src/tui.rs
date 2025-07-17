@@ -21,6 +21,8 @@ pub enum TuiCommand {
     Volume(i64),
     Seek(f64),
     PlayPause,
+    NextChapter,
+    PrevChapter,
 }
 
 pub struct FileLoadedData {
@@ -42,6 +44,8 @@ pub fn tui(
         (KeyCode::Char(']'), TuiCommand::Volume(10)),
         (KeyCode::Left, TuiCommand::Seek(-10.0)),
         (KeyCode::Right, TuiCommand::Seek(10.0)),
+        (KeyCode::Char('z'), TuiCommand::PrevChapter),
+        (KeyCode::Char('b'), TuiCommand::NextChapter),
         (KeyCode::Char(' '), TuiCommand::PlayPause),
     ]);
 
@@ -108,6 +112,12 @@ pub fn tui(
                                 }
                                 TuiCommand::PlayPause => {
                                     libmpv_s.send(LibMpvMessage::PlayPause).unwrap();
+                                }
+                                TuiCommand::PrevChapter => {
+                                    libmpv_s.send(LibMpvMessage::PrevChapter).unwrap();
+                                }
+                                TuiCommand::NextChapter => {
+                                    libmpv_s.send(LibMpvMessage::NextChapter).unwrap();
                                 }
                             }
                         }

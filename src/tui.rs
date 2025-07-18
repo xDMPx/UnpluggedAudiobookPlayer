@@ -5,6 +5,7 @@ use ratatui::{
     widgets::{Block, Borders},
 };
 
+#[derive(Debug)]
 pub enum TuiMessage {
     StartFile,
     AudioReady,
@@ -16,6 +17,7 @@ pub enum TuiMessage {
     ChapterUpdate(String),
 }
 
+#[derive(Debug)]
 pub enum TuiCommand {
     Quit,
     Volume(i64),
@@ -25,6 +27,7 @@ pub enum TuiCommand {
     PrevChapter,
 }
 
+#[derive(Debug)]
 pub struct FileLoadedData {
     pub media_title: String,
     pub duration: f64,
@@ -36,6 +39,7 @@ pub fn tui(
     libmpv_s: crossbeam::channel::Sender<LibMpvMessage>,
     tui_r: crossbeam::channel::Receiver<TuiMessage>,
 ) {
+    log::debug!("Tui::Start");
     let commands = std::collections::HashMap::from([
         (
             KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE),
@@ -132,6 +136,7 @@ pub fn tui(
         if event::poll(std::time::Duration::from_millis(16)).unwrap() {
             let event = event::read();
             if let Ok(event) = event {
+                log::debug!("Tui::Event: {event:?}");
                 match event {
                     event::Event::Key(key) => {
                         if let Some(command) = commands.get(&key) {
@@ -165,6 +170,7 @@ pub fn tui(
             }
         }
         if let Ok(rec) = tui_r.try_recv() {
+            log::debug!("Tui::TuiMessage: {rec:?}");
             match rec {
                 TuiMessage::StartFile => {
                     playback_ready = false;

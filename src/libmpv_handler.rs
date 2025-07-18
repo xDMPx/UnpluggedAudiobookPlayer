@@ -1,6 +1,7 @@
 use crate::tui::{FileLoadedData, TuiMessage};
 use std::io::Write;
 
+#[derive(Debug)]
 pub enum LibMpvMessage {
     Quit,
     UpdateVolume(i64),
@@ -69,6 +70,7 @@ pub fn libmpv(
     tui_s: crossbeam::channel::Sender<TuiMessage>,
     libmpv_r: crossbeam::channel::Receiver<LibMpvMessage>,
 ) {
+    log::debug!("LibMpv::Start");
     let mut mpv_handler = LibMpvHandler::initialize_libmpv(100).unwrap();
     mpv_handler.create_event_context().unwrap();
     mpv_handler.load_file(path).unwrap();
@@ -80,6 +82,7 @@ pub fn libmpv(
                 .unwrap_or(Err(libmpv2::Error::Null));
 
             if let Ok(msg) = libmpv_r.try_recv() {
+                log::debug!("LibMpv::LibMpvMessage: {msg:?}");
                 match msg {
                     LibMpvMessage::Quit => {
                         let diff = 5.0;
@@ -133,6 +136,9 @@ pub fn libmpv(
                 }
             }
 
+            if ev.is_ok() {
+                log::debug!("LibMpv::Event {ev:?}");
+            }
             match ev {
                 Ok(event) => match event {
                     libmpv2::events::Event::StartFile => {

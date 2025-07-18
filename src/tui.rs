@@ -62,8 +62,16 @@ pub fn tui(
             TuiCommand::Seek(-10.0),
         ),
         (
+            KeyEvent::new(KeyCode::Left, KeyModifiers::SHIFT),
+            TuiCommand::Seek(-60.0),
+        ),
+        (
             KeyEvent::new(KeyCode::Right, KeyModifiers::NONE),
             TuiCommand::Seek(10.0),
+        ),
+        (
+            KeyEvent::new(KeyCode::Right, KeyModifiers::SHIFT),
+            TuiCommand::Seek(60.0),
         ),
         (
             KeyEvent::new(KeyCode::Char('z'), KeyModifiers::NONE),

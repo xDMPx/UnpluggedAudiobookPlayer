@@ -1,5 +1,5 @@
 use crate::libmpv_handler::LibMpvMessage;
-use ratatui::crossterm::event::{self, KeyCode};
+use ratatui::crossterm::event::{self, KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{
     DefaultTerminal,
     widgets::{Block, Borders},
@@ -37,16 +37,46 @@ pub fn tui(
     tui_r: crossbeam::channel::Receiver<TuiMessage>,
 ) {
     let commands = std::collections::HashMap::from([
-        (KeyCode::Char('q'), TuiCommand::Quit),
-        (KeyCode::Char('{'), TuiCommand::Volume(-1)),
-        (KeyCode::Char('}'), TuiCommand::Volume(1)),
-        (KeyCode::Char('['), TuiCommand::Volume(-10)),
-        (KeyCode::Char(']'), TuiCommand::Volume(10)),
-        (KeyCode::Left, TuiCommand::Seek(-10.0)),
-        (KeyCode::Right, TuiCommand::Seek(10.0)),
-        (KeyCode::Char('z'), TuiCommand::PrevChapter),
-        (KeyCode::Char('b'), TuiCommand::NextChapter),
-        (KeyCode::Char(' '), TuiCommand::PlayPause),
+        (
+            KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE),
+            TuiCommand::Quit,
+        ),
+        (
+            KeyEvent::new(KeyCode::Char('{'), KeyModifiers::NONE),
+            TuiCommand::Volume(-1),
+        ),
+        (
+            KeyEvent::new(KeyCode::Char('}'), KeyModifiers::NONE),
+            TuiCommand::Volume(1),
+        ),
+        (
+            KeyEvent::new(KeyCode::Char('['), KeyModifiers::NONE),
+            TuiCommand::Volume(-10),
+        ),
+        (
+            KeyEvent::new(KeyCode::Char(']'), KeyModifiers::NONE),
+            TuiCommand::Volume(10),
+        ),
+        (
+            KeyEvent::new(KeyCode::Left, KeyModifiers::NONE),
+            TuiCommand::Seek(-10.0),
+        ),
+        (
+            KeyEvent::new(KeyCode::Right, KeyModifiers::NONE),
+            TuiCommand::Seek(10.0),
+        ),
+        (
+            KeyEvent::new(KeyCode::Char('z'), KeyModifiers::NONE),
+            TuiCommand::PrevChapter,
+        ),
+        (
+            KeyEvent::new(KeyCode::Char('b'), KeyModifiers::NONE),
+            TuiCommand::NextChapter,
+        ),
+        (
+            KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE),
+            TuiCommand::PlayPause,
+        ),
     ]);
 
     let mut title = String::new();
@@ -96,7 +126,7 @@ pub fn tui(
             if let Ok(event) = event {
                 match event {
                     event::Event::Key(key) => {
-                        if let Some(command) = commands.get(&key.code) {
+                        if let Some(command) = commands.get(&key) {
                             match command {
                                 TuiCommand::Quit => {
                                     libmpv_s.send(LibMpvMessage::Quit).unwrap();

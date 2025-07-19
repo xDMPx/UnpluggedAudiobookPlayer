@@ -145,7 +145,8 @@ pub fn libmpv(
                         tui_s.send(TuiMessage::StartFile).unwrap();
                     }
                     libmpv2::events::Event::PlaybackRestart => {
-                        tui_s.send(TuiMessage::AudioReady).unwrap();
+                        let pause = mpv_handler.mpv.get_property::<bool>("pause").unwrap();
+                        tui_s.send(TuiMessage::PlaybackRestart(pause)).unwrap();
                     }
                     libmpv2::events::Event::PropertyChange {
                         name: "pause",

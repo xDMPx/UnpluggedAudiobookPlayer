@@ -8,7 +8,7 @@ use ratatui::{
 #[derive(Debug)]
 pub enum TuiMessage {
     StartFile,
-    AudioReady,
+    PlaybackRestart(bool),
     PlaybackPause,
     PlaybackResume,
     FileLoaded(FileLoadedData),
@@ -175,10 +175,10 @@ pub fn tui(
                 TuiMessage::StartFile => {
                     playback_ready = false;
                 }
-                TuiMessage::AudioReady => {
+                TuiMessage::PlaybackRestart(paused) => {
                     playback_start = std::time::SystemTime::now();
                     playback_ready = true;
-                    playback_paused = false;
+                    playback_paused = paused;
                 }
                 TuiMessage::FileLoaded(data) => {
                     playback_start = std::time::SystemTime::now();

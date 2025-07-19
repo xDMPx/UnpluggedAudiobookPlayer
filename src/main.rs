@@ -1,3 +1,5 @@
+use std::io::Write;
+
 fn main() {
     simplelog::WriteLogger::init(
         simplelog::LevelFilter::Debug,
@@ -6,8 +8,22 @@ fn main() {
     )
     .unwrap();
 
-    let file_path = std::env::args().nth(1).expect("Provide file path");
+    let file_path = std::env::args()
+        .nth(1)
+        .map_or_else(|| std::fs::read_to_string("last.txt"), Ok)
+        .expect("Provide file path\n");
+
+    let abs_file_path = std::path::absolute(&file_path).unwrap();
+    if !abs_file_path.try_exists().unwrap() {
+        eprintln!("Provide valid file path");
+        std::process::exit(0);
+    }
+
+    let mut file = std::fs::File::create(format!("last.txt")).unwrap();
+    file.write_all(abs_file_path.to_str().unwrap().as_bytes())
+        .unwrap();
     log::debug!("File path: {file_path}");
+
     let time: f64 = if let Ok(str) = std::fs::read_to_string(format!("{file_path}.txt")) {
         str.parse().unwrap()
     } else {

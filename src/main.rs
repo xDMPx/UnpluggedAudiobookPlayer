@@ -6,7 +6,7 @@ fn main() {
     )
     .unwrap();
 
-    let file_path = std::env::args().skip(1).next().expect("Provide file path");
+    let file_path = std::env::args().nth(1).expect("Provide file path");
     log::debug!("File path: {file_path}");
     let time: f64 = if let Ok(str) = std::fs::read_to_string(format!("{file_path}.txt")) {
         str.parse().unwrap()

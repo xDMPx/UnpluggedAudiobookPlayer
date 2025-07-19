@@ -115,9 +115,7 @@ pub fn tui(
         let mut playback_time = playback_time.floor() as u64;
         playback_time = playback_time.min(playback_duration);
         let symbol = {
-            if !playback_ready {
-                "|"
-            } else if playback_paused {
+            if !playback_ready || playback_paused {
                 "|"
             } else {
                 ">"
@@ -137,35 +135,32 @@ pub fn tui(
             let event = event::read();
             if let Ok(event) = event {
                 log::debug!("Tui::Event: {event:?}");
-                match event {
-                    event::Event::Key(key) => {
-                        if let Some(command) = commands.get(&key) {
-                            match command {
-                                TuiCommand::Quit => {
-                                    libmpv_s.send(LibMpvMessage::Quit).unwrap();
-                                    break;
-                                }
-                                TuiCommand::Volume(vol) => {
-                                    libmpv_s.send(LibMpvMessage::UpdateVolume(*vol)).unwrap();
-                                }
-                                TuiCommand::Seek(offset) => {
-                                    libmpv_s
-                                        .send(LibMpvMessage::UpdatePosition(*offset))
-                                        .unwrap();
-                                }
-                                TuiCommand::PlayPause => {
-                                    libmpv_s.send(LibMpvMessage::PlayPause).unwrap();
-                                }
-                                TuiCommand::PrevChapter => {
-                                    libmpv_s.send(LibMpvMessage::PrevChapter).unwrap();
-                                }
-                                TuiCommand::NextChapter => {
-                                    libmpv_s.send(LibMpvMessage::NextChapter).unwrap();
-                                }
+                if let event::Event::Key(key) = event {
+                    if let Some(command) = commands.get(&key) {
+                        match command {
+                            TuiCommand::Quit => {
+                                libmpv_s.send(LibMpvMessage::Quit).unwrap();
+                                break;
+                            }
+                            TuiCommand::Volume(vol) => {
+                                libmpv_s.send(LibMpvMessage::UpdateVolume(*vol)).unwrap();
+                            }
+                            TuiCommand::Seek(offset) => {
+                                libmpv_s
+                                    .send(LibMpvMessage::UpdatePosition(*offset))
+                                    .unwrap();
+                            }
+                            TuiCommand::PlayPause => {
+                                libmpv_s.send(LibMpvMessage::PlayPause).unwrap();
+                            }
+                            TuiCommand::PrevChapter => {
+                                libmpv_s.send(LibMpvMessage::PrevChapter).unwrap();
+                            }
+                            TuiCommand::NextChapter => {
+                                libmpv_s.send(LibMpvMessage::NextChapter).unwrap();
                             }
                         }
                     }
-                    _ => (),
                 }
             }
         }

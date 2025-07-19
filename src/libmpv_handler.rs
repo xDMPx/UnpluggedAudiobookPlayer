@@ -104,12 +104,7 @@ pub fn libmpv(
                     LibMpvMessage::UpdateVolume(vol) => {
                         let mut volume = mpv_handler.mpv.get_property::<i64>("volume").unwrap();
                         volume += vol;
-                        if volume < 0 {
-                            volume = 0;
-                        }
-                        if volume > 200 {
-                            volume = 200;
-                        }
+                        volume = volume.clamp(0, 200);
                         mpv_handler.mpv.set_property("volume", volume).unwrap();
                     }
                     LibMpvMessage::UpdatePosition(offset) => {

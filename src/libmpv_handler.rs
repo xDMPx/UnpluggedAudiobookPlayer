@@ -68,6 +68,7 @@ pub fn libmpv(
     path: &str,
     time: f64,
     tui_s: crossbeam::channel::Sender<TuiMessage>,
+    mc_tui_s: crossbeam::channel::Sender<TuiMessage>,
     libmpv_r: crossbeam::channel::Receiver<LibMpvMessage>,
 ) {
     log::debug!("LibMpv::Start");
@@ -85,6 +86,7 @@ pub fn libmpv(
                 log::debug!("LibMpv::LibMpvMessage: {msg:?}");
                 match msg {
                     LibMpvMessage::Quit => {
+                        mc_tui_s.send(TuiMessage::Quit).unwrap();
                         let diff = 5.0;
                         let mut pos = mpv_handler
                             .mpv
@@ -138,10 +140,12 @@ pub fn libmpv(
                 Ok(event) => match event {
                     libmpv2::events::Event::StartFile => {
                         tui_s.send(TuiMessage::StartFile).unwrap();
+                        mc_tui_s.send(TuiMessage::StartFile).unwrap();
                     }
                     libmpv2::events::Event::PlaybackRestart => {
                         let pause = mpv_handler.mpv.get_property::<bool>("pause").unwrap();
                         tui_s.send(TuiMessage::PlaybackRestart(pause)).unwrap();
+                        mc_tui_s.send(TuiMessage::PlaybackRestart(pause)).unwrap();
                     }
                     libmpv2::events::Event::PropertyChange {
                         name: "pause",
@@ -150,8 +154,10 @@ pub fn libmpv(
                     } => {
                         if pause {
                             tui_s.send(TuiMessage::PlaybackPause).unwrap();
+                            mc_tui_s.send(TuiMessage::PlaybackPause).unwrap();
                         } else {
                             tui_s.send(TuiMessage::PlaybackResume).unwrap();
+                            mc_tui_s.send(TuiMessage::PlaybackResume).unwrap();
                         }
                     }
                     libmpv2::events::Event::PropertyChange {
@@ -160,6 +166,7 @@ pub fn libmpv(
                         ..
                     } => {
                         tui_s.send(TuiMessage::VolumeUpdate(volume)).unwrap();
+                        mc_tui_s.send(TuiMessage::VolumeUpdate(volume)).unwrap();
                     }
                     libmpv2::events::Event::PropertyChange {
                         name: "chapter",
@@ -169,7 +176,10 @@ pub fn libmpv(
                         if i >= 0 {
                             let chapter =
                                 mpv_handler.chapters.get(i as usize).unwrap().title.clone();
-                            tui_s.send(TuiMessage::ChapterUpdate(chapter)).unwrap();
+                            tui_s
+                                .send(TuiMessage::ChapterUpdate(chapter.clone()))
+                                .unwrap();
+                            mc_tui_s.send(TuiMessage::ChapterUpdate(chapter)).unwrap();
                         }
                     }
                     libmpv2::events::Event::Seek => {
@@ -178,6 +188,7 @@ pub fn libmpv(
                             .get_property::<f64>("time-pos/full")
                             .unwrap();
                         tui_s.send(TuiMessage::PositionUpdate(time_pos)).unwrap();
+                        mc_tui_s.send(TuiMessage::PositionUpdate(time_pos)).unwrap();
                     }
                     libmpv2::events::Event::FileLoaded => {
                         let media_title = mpv_handler
@@ -203,6 +214,14 @@ pub fn libmpv(
                             .clone();
                         let volume = mpv_handler.mpv.get_property::<i64>("volume").unwrap();
                         tui_s
+                            .send(TuiMessage::FileLoaded(FileLoadedData {
+                                media_title: media_title.clone(),
+                                duration,
+                                volume,
+                                chapter: chapter.clone(),
+                            }))
+                            .unwrap();
+                        mc_tui_s
                             .send(TuiMessage::FileLoaded(FileLoadedData {
                                 media_title,
                                 duration,

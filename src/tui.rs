@@ -15,6 +15,7 @@ pub enum TuiMessage {
     VolumeUpdate(i64),
     PositionUpdate(f64),
     ChapterUpdate(String),
+    Quit,
 }
 
 #[derive(Debug)]
@@ -199,6 +200,7 @@ pub fn tui(
                 TuiMessage::ChapterUpdate(chap) => {
                     chapter = chap;
                 }
+                TuiMessage::Quit => (),
             }
         }
     }

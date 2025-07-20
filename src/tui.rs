@@ -1,22 +1,9 @@
-use crate::libmpv_handler::LibMpvMessage;
+use crate::libmpv_handler::{LibMpvEventMessage, LibMpvMessage};
 use ratatui::crossterm::event::{self, KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{
     DefaultTerminal,
     widgets::{Block, Borders},
 };
-
-#[derive(Debug)]
-pub enum TuiMessage {
-    StartFile,
-    PlaybackRestart(bool),
-    PlaybackPause,
-    PlaybackResume,
-    FileLoaded(FileLoadedData),
-    VolumeUpdate(i64),
-    PositionUpdate(f64),
-    ChapterUpdate(String),
-    Quit,
-}
 
 #[derive(Debug)]
 pub enum TuiCommand {
@@ -28,17 +15,9 @@ pub enum TuiCommand {
     PrevChapter,
 }
 
-#[derive(Debug)]
-pub struct FileLoadedData {
-    pub media_title: String,
-    pub duration: f64,
-    pub volume: i64,
-    pub chapter: String,
-}
-
 pub fn tui(
     libmpv_s: crossbeam::channel::Sender<LibMpvMessage>,
-    tui_r: crossbeam::channel::Receiver<TuiMessage>,
+    tui_r: crossbeam::channel::Receiver<LibMpvEventMessage>,
 ) {
     log::debug!("Tui::Start");
     let commands = std::collections::HashMap::from([
@@ -166,41 +145,41 @@ pub fn tui(
             }
         }
         if let Ok(rec) = tui_r.try_recv() {
-            log::debug!("Tui::TuiMessage: {rec:?}");
+            log::debug!("Tui::LibMpvEventMessage: {rec:?}");
             match rec {
-                TuiMessage::StartFile => {
+                LibMpvEventMessage::StartFile => {
                     playback_ready = false;
                 }
-                TuiMessage::PlaybackRestart(paused) => {
+                LibMpvEventMessage::PlaybackRestart(paused) => {
                     playback_start = std::time::SystemTime::now();
                     playback_ready = true;
                     playback_paused = paused;
                 }
-                TuiMessage::FileLoaded(data) => {
+                LibMpvEventMessage::FileLoaded(data) => {
                     playback_start = std::time::SystemTime::now();
                     playback_duration = data.duration.floor() as u64;
                     playback_volume = data.volume;
                     title = data.media_title;
                 }
-                TuiMessage::PlaybackPause => {
+                LibMpvEventMessage::PlaybackPause => {
                     playback_start_offset += playback_start.elapsed().unwrap().as_secs_f64();
                     playback_paused = true;
                 }
-                TuiMessage::PlaybackResume => {
+                LibMpvEventMessage::PlaybackResume => {
                     playback_start = std::time::SystemTime::now();
                     playback_paused = false;
                 }
-                TuiMessage::VolumeUpdate(vol) => {
+                LibMpvEventMessage::VolumeUpdate(vol) => {
                     playback_volume = vol;
                 }
-                TuiMessage::PositionUpdate(pos) => {
+                LibMpvEventMessage::PositionUpdate(pos) => {
                     playback_start = std::time::SystemTime::now();
                     playback_start_offset = pos;
                 }
-                TuiMessage::ChapterUpdate(chap) => {
+                LibMpvEventMessage::ChapterUpdate(chap) => {
                     chapter = chap;
                 }
-                TuiMessage::Quit => (),
+                LibMpvEventMessage::Quit => (),
             }
         }
     }

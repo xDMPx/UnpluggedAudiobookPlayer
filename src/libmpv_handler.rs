@@ -1,4 +1,3 @@
-use crate::tui::{FileLoadedData, TuiMessage};
 use std::io::Write;
 
 #[derive(Debug)]
@@ -9,6 +8,27 @@ pub enum LibMpvMessage {
     PlayPause,
     NextChapter,
     PrevChapter,
+}
+
+#[derive(Debug)]
+pub enum LibMpvEventMessage {
+    StartFile,
+    PlaybackRestart(bool),
+    PlaybackPause,
+    PlaybackResume,
+    FileLoaded(FileLoadedData),
+    VolumeUpdate(i64),
+    PositionUpdate(f64),
+    ChapterUpdate(String),
+    Quit,
+}
+
+#[derive(Debug)]
+pub struct FileLoadedData {
+    pub media_title: String,
+    pub duration: f64,
+    pub volume: i64,
+    pub chapter: String,
 }
 
 #[derive(serde::Deserialize)]
@@ -67,8 +87,8 @@ impl LibMpvHandler {
 pub fn libmpv(
     path: &str,
     time: f64,
-    tui_s: crossbeam::channel::Sender<TuiMessage>,
-    mc_tui_s: crossbeam::channel::Sender<TuiMessage>,
+    tui_s: crossbeam::channel::Sender<LibMpvEventMessage>,
+    mc_tui_s: crossbeam::channel::Sender<LibMpvEventMessage>,
     libmpv_r: crossbeam::channel::Receiver<LibMpvMessage>,
 ) {
     log::debug!("LibMpv::Start");
@@ -86,7 +106,7 @@ pub fn libmpv(
                 log::debug!("LibMpv::LibMpvMessage: {msg:?}");
                 match msg {
                     LibMpvMessage::Quit => {
-                        mc_tui_s.send(TuiMessage::Quit).unwrap();
+                        mc_tui_s.send(LibMpvEventMessage::Quit).unwrap();
                         let diff = 5.0;
                         let mut pos = mpv_handler
                             .mpv
@@ -139,13 +159,17 @@ pub fn libmpv(
             match ev {
                 Ok(event) => match event {
                     libmpv2::events::Event::StartFile => {
-                        tui_s.send(TuiMessage::StartFile).unwrap();
-                        mc_tui_s.send(TuiMessage::StartFile).unwrap();
+                        tui_s.send(LibMpvEventMessage::StartFile).unwrap();
+                        mc_tui_s.send(LibMpvEventMessage::StartFile).unwrap();
                     }
                     libmpv2::events::Event::PlaybackRestart => {
                         let pause = mpv_handler.mpv.get_property::<bool>("pause").unwrap();
-                        tui_s.send(TuiMessage::PlaybackRestart(pause)).unwrap();
-                        mc_tui_s.send(TuiMessage::PlaybackRestart(pause)).unwrap();
+                        tui_s
+                            .send(LibMpvEventMessage::PlaybackRestart(pause))
+                            .unwrap();
+                        mc_tui_s
+                            .send(LibMpvEventMessage::PlaybackRestart(pause))
+                            .unwrap();
                     }
                     libmpv2::events::Event::PropertyChange {
                         name: "pause",
@@ -153,11 +177,11 @@ pub fn libmpv(
                         ..
                     } => {
                         if pause {
-                            tui_s.send(TuiMessage::PlaybackPause).unwrap();
-                            mc_tui_s.send(TuiMessage::PlaybackPause).unwrap();
+                            tui_s.send(LibMpvEventMessage::PlaybackPause).unwrap();
+                            mc_tui_s.send(LibMpvEventMessage::PlaybackPause).unwrap();
                         } else {
-                            tui_s.send(TuiMessage::PlaybackResume).unwrap();
-                            mc_tui_s.send(TuiMessage::PlaybackResume).unwrap();
+                            tui_s.send(LibMpvEventMessage::PlaybackResume).unwrap();
+                            mc_tui_s.send(LibMpvEventMessage::PlaybackResume).unwrap();
                         }
                     }
                     libmpv2::events::Event::PropertyChange {
@@ -165,8 +189,12 @@ pub fn libmpv(
                         change: libmpv2::events::PropertyData::Int64(volume),
                         ..
                     } => {
-                        tui_s.send(TuiMessage::VolumeUpdate(volume)).unwrap();
-                        mc_tui_s.send(TuiMessage::VolumeUpdate(volume)).unwrap();
+                        tui_s
+                            .send(LibMpvEventMessage::VolumeUpdate(volume))
+                            .unwrap();
+                        mc_tui_s
+                            .send(LibMpvEventMessage::VolumeUpdate(volume))
+                            .unwrap();
                     }
                     libmpv2::events::Event::PropertyChange {
                         name: "chapter",
@@ -177,9 +205,11 @@ pub fn libmpv(
                             let chapter =
                                 mpv_handler.chapters.get(i as usize).unwrap().title.clone();
                             tui_s
-                                .send(TuiMessage::ChapterUpdate(chapter.clone()))
+                                .send(LibMpvEventMessage::ChapterUpdate(chapter.clone()))
                                 .unwrap();
-                            mc_tui_s.send(TuiMessage::ChapterUpdate(chapter)).unwrap();
+                            mc_tui_s
+                                .send(LibMpvEventMessage::ChapterUpdate(chapter))
+                                .unwrap();
                         }
                     }
                     libmpv2::events::Event::Seek => {
@@ -187,8 +217,12 @@ pub fn libmpv(
                             .mpv
                             .get_property::<f64>("time-pos/full")
                             .unwrap();
-                        tui_s.send(TuiMessage::PositionUpdate(time_pos)).unwrap();
-                        mc_tui_s.send(TuiMessage::PositionUpdate(time_pos)).unwrap();
+                        tui_s
+                            .send(LibMpvEventMessage::PositionUpdate(time_pos))
+                            .unwrap();
+                        mc_tui_s
+                            .send(LibMpvEventMessage::PositionUpdate(time_pos))
+                            .unwrap();
                     }
                     libmpv2::events::Event::FileLoaded => {
                         let media_title = mpv_handler
@@ -214,7 +248,7 @@ pub fn libmpv(
                             .clone();
                         let volume = mpv_handler.mpv.get_property::<i64>("volume").unwrap();
                         tui_s
-                            .send(TuiMessage::FileLoaded(FileLoadedData {
+                            .send(LibMpvEventMessage::FileLoaded(FileLoadedData {
                                 media_title: media_title.clone(),
                                 duration,
                                 volume,
@@ -222,7 +256,7 @@ pub fn libmpv(
                             }))
                             .unwrap();
                         mc_tui_s
-                            .send(TuiMessage::FileLoaded(FileLoadedData {
+                            .send(LibMpvEventMessage::FileLoaded(FileLoadedData {
                                 media_title,
                                 duration,
                                 volume,

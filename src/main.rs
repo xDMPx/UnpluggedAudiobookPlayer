@@ -33,10 +33,10 @@ fn main() {
 
     let (tui_s, tui_r) = crossbeam::channel::unbounded();
     let (libmpv_s, libmpv_r) = crossbeam::channel::unbounded();
-
     let mut mc_os_interface =
         unplugged_audiobook_player::mc_os_interface::MCOSInterface::new(libmpv_s.clone());
     let (mc_tui_s, mc_tui_r) = crossbeam::channel::unbounded();
+
     crossbeam::scope(move |scope| {
         scope.spawn(|_| {
             unplugged_audiobook_player::tui::tui(libmpv_s, tui_r);

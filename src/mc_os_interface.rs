@@ -1,5 +1,4 @@
-use crate::libmpv_handler::LibMpvMessage;
-use crate::tui::TuiMessage;
+use crate::libmpv_handler::{LibMpvEventMessage, LibMpvMessage};
 
 #[derive(Debug)]
 pub enum MCOSInterfaceSignals {
@@ -69,18 +68,21 @@ impl MCOSInterface {
         }
     }
 
-    pub fn handle_signals(&mut self, tui_r: crossbeam::channel::Receiver<crate::tui::TuiMessage>) {
+    pub fn handle_signals(
+        &mut self,
+        tui_r: crossbeam::channel::Receiver<crate::libmpv_handler::LibMpvEventMessage>,
+    ) {
         loop {
             std::thread::sleep(std::time::Duration::from_millis(16));
             if let Ok(rec) = tui_r.try_recv() {
-                log::debug!("MCOSInterface::TuiMessage: {rec:?}");
+                log::debug!("MCOSInterface::LibMpvEventMessage: {rec:?}");
                 match rec {
-                    TuiMessage::StartFile => {
+                    LibMpvEventMessage::StartFile => {
                         self.media_controller
                             .set_playback(souvlaki::MediaPlayback::Playing { progress: None })
                             .unwrap();
                     }
-                    TuiMessage::PlaybackRestart(paused) => {
+                    LibMpvEventMessage::PlaybackRestart(paused) => {
                         if paused {
                             self.media_controller
                                 .set_playback(souvlaki::MediaPlayback::Playing { progress: None })
@@ -91,7 +93,7 @@ impl MCOSInterface {
                                 .unwrap();
                         }
                     }
-                    TuiMessage::FileLoaded(data) => {
+                    LibMpvEventMessage::FileLoaded(data) => {
                         self.media_controller
                             .set_playback(souvlaki::MediaPlayback::Playing { progress: None })
                             .unwrap();
@@ -102,20 +104,20 @@ impl MCOSInterface {
                             })
                             .unwrap();
                     }
-                    TuiMessage::PlaybackPause => {
+                    LibMpvEventMessage::PlaybackPause => {
                         self.media_controller
                             .set_playback(souvlaki::MediaPlayback::Paused { progress: None })
                             .unwrap();
                     }
-                    TuiMessage::PlaybackResume => {
+                    LibMpvEventMessage::PlaybackResume => {
                         self.media_controller
                             .set_playback(souvlaki::MediaPlayback::Playing { progress: None })
                             .unwrap();
                     }
-                    TuiMessage::VolumeUpdate(_) => (),
-                    TuiMessage::ChapterUpdate(_) => (),
-                    TuiMessage::PositionUpdate(_) => (),
-                    TuiMessage::Quit => {
+                    LibMpvEventMessage::VolumeUpdate(_) => (),
+                    LibMpvEventMessage::ChapterUpdate(_) => (),
+                    LibMpvEventMessage::PositionUpdate(_) => (),
+                    LibMpvEventMessage::Quit => {
                         break;
                     }
                 }

@@ -28,10 +28,10 @@ pub struct FileLoadedData {
     pub media_title: String,
     pub duration: f64,
     pub volume: i64,
-    pub chapter: String,
+    pub chapter: Option<String>,
 }
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, Debug)]
 pub struct Chapter {
     title: String,
     #[allow(dead_code)]
@@ -134,15 +134,19 @@ impl LibMpvHandler {
                             self.mpv.command("cycle", &["pause"]).unwrap();
                         }
                         LibMpvMessage::PrevChapter => {
-                            let chapter = self.mpv.get_property::<i64>("chapter").unwrap() - 1;
-                            if chapter >= 0 {
-                                self.mpv.set_property("chapter", chapter).unwrap();
+                            if self.chapters.len() > 0 {
+                                let chapter = self.mpv.get_property::<i64>("chapter").unwrap() - 1;
+                                if chapter >= 0 {
+                                    self.mpv.set_property("chapter", chapter).unwrap();
+                                }
                             }
                         }
                         LibMpvMessage::NextChapter => {
-                            let chapter = self.mpv.get_property::<i64>("chapter").unwrap() + 1;
-                            if chapter < (self.chapters.len() as i64) {
-                                self.mpv.set_property("chapter", chapter).unwrap();
+                            if self.chapters.len() > 0 {
+                                let chapter = self.mpv.get_property::<i64>("chapter").unwrap() + 1;
+                                if chapter < (self.chapters.len() as i64) {
+                                    self.mpv.set_property("chapter", chapter).unwrap();
+                                }
                             }
                         }
                     }
@@ -226,9 +230,14 @@ impl LibMpvHandler {
                                 .command("seek", &[&time.to_string(), "absolute"])
                                 .unwrap();
                             self.fech_chapters().unwrap();
-                            let chapter = self.mpv.get_property::<i64>("chapter").unwrap();
-                            let chapter =
-                                self.chapters.get(chapter as usize).unwrap().title.clone();
+                            let chapter = {
+                                if self.chapters.len() > 0 {
+                                    let chapter = self.mpv.get_property::<i64>("chapter").unwrap();
+                                    Some(self.chapters.get(chapter as usize).unwrap().title.clone())
+                                } else {
+                                    None
+                                }
+                            };
                             let volume = self.mpv.get_property::<i64>("volume").unwrap();
                             tui_s
                                 .send(LibMpvEventMessage::FileLoaded(FileLoadedData {
@@ -243,7 +252,7 @@ impl LibMpvHandler {
                                     media_title,
                                     duration,
                                     volume,
-                                    chapter,
+                                    chapter: chapter,
                                 }))
                                 .unwrap();
                         }

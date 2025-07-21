@@ -72,7 +72,7 @@ pub fn tui(
     ]);
 
     let mut title = String::new();
-    let mut chapter = String::new();
+    let mut chapter: Option<String> = None;
     let mut terminal = ratatui::init();
 
     let mut playback_start = std::time::SystemTime::now();
@@ -102,8 +102,11 @@ pub fn tui(
             }
         };
         let mut to_draw = title.clone();
+        if let Some(chapter) = chapter.as_ref() {
+            to_draw.push_str(&format!("\n{chapter}",));
+        }
         to_draw.push_str(&format!(
-            "\n{chapter}\n{} {} / {} vol: {}",
+            "\n{} {} / {} vol: {}",
             symbol,
             secs_to_hms(playback_time),
             secs_to_hms(playback_duration),
@@ -160,6 +163,7 @@ pub fn tui(
                     playback_duration = data.duration.floor() as u64;
                     playback_volume = data.volume;
                     title = data.media_title;
+                    chapter = data.chapter;
                 }
                 LibMpvEventMessage::PlaybackPause => {
                     playback_start_offset += playback_start.elapsed().unwrap().as_secs_f64();
@@ -177,7 +181,7 @@ pub fn tui(
                     playback_start_offset = pos;
                 }
                 LibMpvEventMessage::ChapterUpdate(chap) => {
-                    chapter = chap;
+                    chapter = Some(chap);
                 }
                 LibMpvEventMessage::Quit => (),
             }

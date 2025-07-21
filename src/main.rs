@@ -18,6 +18,10 @@ fn main() {
         eprintln!("Provide valid file path");
         std::process::exit(0);
     }
+    if !is_audiofile(&abs_file_path) {
+        eprintln!("Provide valid audiobook file (.m4b/.mp3)");
+        std::process::exit(0);
+    }
 
     let mut file = std::fs::File::create(format!("last.txt")).unwrap();
     file.write_all(abs_file_path.to_str().unwrap().as_bytes())
@@ -52,4 +56,16 @@ fn main() {
         });
     })
     .unwrap();
+}
+
+fn is_audiofile(path: &std::path::PathBuf) -> bool {
+    if let Some(ext) = path.extension() {
+        if ext == "m4b" {
+            return true;
+        } else if ext == "mp3" {
+            return true;
+        }
+    }
+
+    false
 }

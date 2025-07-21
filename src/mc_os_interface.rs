@@ -72,6 +72,7 @@ impl MCOSInterface {
         &mut self,
         tui_r: crossbeam::channel::Receiver<crate::libmpv_handler::LibMpvEventMessage>,
     ) {
+        log::debug!("MCOSInterface::handle_signals Start");
         loop {
             std::thread::sleep(std::time::Duration::from_millis(16));
             if let Ok(rec) = tui_r.try_recv() {
@@ -123,5 +124,6 @@ impl MCOSInterface {
                 }
             }
         }
+        log::debug!("MCOSInterface::handle_signals END");
     }
 }

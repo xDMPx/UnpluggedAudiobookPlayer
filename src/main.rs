@@ -33,18 +33,19 @@ fn main() {
 
     let (tui_s, tui_r) = crossbeam::channel::unbounded();
     let (libmpv_s, libmpv_r) = crossbeam::channel::unbounded();
-    let mut mc_os_interface =
-        unplugged_audiobook_player::mc_os_interface::MCOSInterface::new(libmpv_s.clone());
     let (mc_tui_s, mc_tui_r) = crossbeam::channel::unbounded();
 
+    let mut mpv =
+        unplugged_audiobook_player::libmpv_handler::LibMpvHandler::initialize_libmpv(101).unwrap();
+    let mut mc_os_interface =
+        unplugged_audiobook_player::mc_os_interface::MCOSInterface::new(libmpv_s.clone());
+
     crossbeam::scope(move |scope| {
-        scope.spawn(|_| {
+        scope.spawn(move |_| {
             unplugged_audiobook_player::tui::tui(libmpv_s, tui_r);
         });
         scope.spawn(move |_| {
-            unplugged_audiobook_player::libmpv_handler::libmpv(
-                &file_path, time, tui_s, mc_tui_s, libmpv_r,
-            );
+            mpv.run(&file_path, time, tui_s, mc_tui_s, libmpv_r);
         });
         scope.spawn(move |_| {
             mc_os_interface.handle_signals(mc_tui_r);

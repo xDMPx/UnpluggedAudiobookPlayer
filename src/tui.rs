@@ -184,6 +184,7 @@ pub fn tui(
         }
     }
     ratatui::restore();
+    log::debug!("Tui::End");
 }
 
 pub fn draw(terminal: &mut DefaultTerminal, text: &str) {

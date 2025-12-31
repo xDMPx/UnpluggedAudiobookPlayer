@@ -56,6 +56,9 @@ impl MCOSInterface {
                     souvlaki::MediaControlEvent::Next => {
                         libmpv_s.send(LibMpvMessage::NextChapter).unwrap();
                     }
+                    souvlaki::MediaControlEvent::Toggle => {
+                        libmpv_s.send(LibMpvMessage::PlayPause).unwrap();
+                    }
                     _ => (),
                 }
             })

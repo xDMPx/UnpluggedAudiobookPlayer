@@ -101,6 +101,7 @@ impl MCOSInterface {
                         self.media_controller
                             .set_metadata(souvlaki::MediaMetadata {
                                 title: Some(&data.media_title),
+                                artist: data.artist.as_deref(),
                                 ..Default::default()
                             })
                             .unwrap();

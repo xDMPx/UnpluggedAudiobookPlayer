@@ -72,6 +72,7 @@ pub fn tui(
     ]);
 
     let mut title = String::new();
+    let mut artist: Option<String> = None;
     let mut chapter: Option<String> = None;
     let mut terminal = ratatui::init();
 
@@ -102,6 +103,10 @@ pub fn tui(
             }
         };
         let mut to_draw = title.clone();
+        if let Some(ref artist) = artist {
+            to_draw.push_str(" by ");
+            to_draw.push_str(artist);
+        }
         if let Some(chapter) = chapter.as_ref() {
             to_draw.push_str(&format!("\n{chapter}",));
         }
@@ -164,6 +169,7 @@ pub fn tui(
                     playback_volume = data.volume;
                     title = data.media_title;
                     chapter = data.chapter;
+                    artist = data.artist;
                 }
                 LibMpvEventMessage::PlaybackPause => {
                     playback_start_offset += playback_start.elapsed().unwrap().as_secs_f64();

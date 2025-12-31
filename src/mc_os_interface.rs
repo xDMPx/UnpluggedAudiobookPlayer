@@ -45,10 +45,10 @@ impl MCOSInterface {
                 log::debug!("MCOSInterface::Event: {event:?}");
                 match event {
                     souvlaki::MediaControlEvent::Play => {
-                        libmpv_s.send(LibMpvMessage::PlayPause).unwrap();
+                        libmpv_s.send(LibMpvMessage::Resume).unwrap();
                     }
                     souvlaki::MediaControlEvent::Pause => {
-                        libmpv_s.send(LibMpvMessage::PlayPause).unwrap();
+                        libmpv_s.send(LibMpvMessage::Pause).unwrap();
                     }
                     souvlaki::MediaControlEvent::Previous => {
                         libmpv_s.send(LibMpvMessage::PrevChapter).unwrap();
@@ -73,6 +73,9 @@ impl MCOSInterface {
         tui_r: crossbeam::channel::Receiver<crate::libmpv_handler::LibMpvEventMessage>,
     ) {
         log::debug!("MCOSInterface::handle_signals Start");
+        self.media_controller
+            .set_playback(souvlaki::MediaPlayback::Playing { progress: None })
+            .unwrap();
         loop {
             std::thread::sleep(std::time::Duration::from_millis(16));
             if let Ok(rec) = tui_r.try_recv() {

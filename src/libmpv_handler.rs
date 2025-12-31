@@ -5,6 +5,8 @@ pub enum LibMpvMessage {
     Quit,
     UpdateVolume(i64),
     UpdatePosition(f64),
+    Resume,
+    Pause,
     PlayPause,
     NextChapter,
     PrevChapter,
@@ -150,6 +152,12 @@ impl LibMpvHandler {
                                     self.mpv.set_property("chapter", chapter).unwrap();
                                 }
                             }
+                        }
+                        LibMpvMessage::Resume => {
+                            self.mpv.set_property("pause", false).unwrap();
+                        }
+                        LibMpvMessage::Pause => {
+                            self.mpv.set_property("pause", true).unwrap();
                         }
                     }
                 }

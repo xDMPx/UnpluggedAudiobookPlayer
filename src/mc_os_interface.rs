@@ -56,9 +56,6 @@ impl MCOSInterface {
                     souvlaki::MediaControlEvent::Next => {
                         libmpv_s.send(LibMpvMessage::NextChapter).unwrap();
                     }
-                    souvlaki::MediaControlEvent::Toggle => {
-                        libmpv_s.send(LibMpvMessage::PlayPause).unwrap();
-                    }
                     _ => (),
                 }
             })
@@ -105,6 +102,7 @@ impl MCOSInterface {
                             .set_metadata(souvlaki::MediaMetadata {
                                 title: Some(&data.media_title),
                                 artist: data.artist.as_deref(),
+                                album: data.album.as_deref(),
                                 ..Default::default()
                             })
                             .unwrap();

@@ -46,7 +46,7 @@ fn main() {
 
     crossbeam::scope(move |scope| {
         scope.spawn(move |_| {
-            unplugged_audiobook_player::tui::tui(libmpv_s, tui_r);
+            unplugged_audiobook_player::tui::tui(libmpv_s, tui_r).unwrap();
         });
         scope.spawn(move |_| {
             mpv.run(&file_path, time, tui_s, mc_tui_s, libmpv_r)

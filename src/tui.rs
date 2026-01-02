@@ -1,3 +1,4 @@
+use crate::UAPlayerError;
 use crate::libmpv_handler::{LibMpvEventMessage, LibMpvMessage};
 use ratatui::crossterm::event::{self, KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{
@@ -18,7 +19,7 @@ pub enum TuiCommand {
 pub fn tui(
     libmpv_s: crossbeam::channel::Sender<LibMpvMessage>,
     tui_r: crossbeam::channel::Receiver<LibMpvEventMessage>,
-) {
+) -> Result<(), UAPlayerError> {
     log::debug!("Tui::Start");
     let commands = std::collections::HashMap::from([
         (
@@ -90,7 +91,7 @@ pub fn tui(
             } else if playback_paused {
                 playback_start_offset
             } else {
-                playback_start_offset + playback_start.elapsed().unwrap().as_secs_f64()
+                playback_start_offset + playback_start.elapsed()?.as_secs_f64()
             }
         };
         let mut playback_time = playback_time.floor() as u64;
@@ -117,9 +118,9 @@ pub fn tui(
             secs_to_hms(playback_duration),
             playback_volume
         ));
-        draw(&mut terminal, &to_draw);
+        draw(&mut terminal, &to_draw)?;
 
-        if event::poll(std::time::Duration::from_millis(16)).unwrap() {
+        if event::poll(std::time::Duration::from_millis(16))? {
             let event = event::read();
             if let Ok(event) = event {
                 log::debug!("Tui::Event: {event:?}");
@@ -127,25 +128,23 @@ pub fn tui(
                     if let Some(command) = commands.get(&key) {
                         match command {
                             TuiCommand::Quit => {
-                                libmpv_s.send(LibMpvMessage::Quit).unwrap();
+                                libmpv_s.send(LibMpvMessage::Quit)?;
                                 break;
                             }
                             TuiCommand::Volume(vol) => {
-                                libmpv_s.send(LibMpvMessage::UpdateVolume(*vol)).unwrap();
+                                libmpv_s.send(LibMpvMessage::UpdateVolume(*vol))?;
                             }
                             TuiCommand::Seek(offset) => {
-                                libmpv_s
-                                    .send(LibMpvMessage::UpdatePosition(*offset))
-                                    .unwrap();
+                                libmpv_s.send(LibMpvMessage::UpdatePosition(*offset))?;
                             }
                             TuiCommand::PlayPause => {
-                                libmpv_s.send(LibMpvMessage::PlayPause).unwrap();
+                                libmpv_s.send(LibMpvMessage::PlayPause)?;
                             }
                             TuiCommand::PrevChapter => {
-                                libmpv_s.send(LibMpvMessage::PrevChapter).unwrap();
+                                libmpv_s.send(LibMpvMessage::PrevChapter)?;
                             }
                             TuiCommand::NextChapter => {
-                                libmpv_s.send(LibMpvMessage::NextChapter).unwrap();
+                                libmpv_s.send(LibMpvMessage::NextChapter)?;
                             }
                         }
                     }
@@ -172,7 +171,7 @@ pub fn tui(
                     artist = data.artist;
                 }
                 LibMpvEventMessage::PlaybackPause => {
-                    playback_start_offset += playback_start.elapsed().unwrap().as_secs_f64();
+                    playback_start_offset += playback_start.elapsed()?.as_secs_f64();
                     playback_paused = true;
                 }
                 LibMpvEventMessage::PlaybackResume => {
@@ -195,20 +194,22 @@ pub fn tui(
     }
     ratatui::restore();
     log::debug!("Tui::End");
+
+    Ok(())
 }
 
-pub fn draw(terminal: &mut DefaultTerminal, text: &str) {
-    terminal
-        .draw(|f| {
-            let area = f.area();
-            let block = Block::default().title("UAP").borders(Borders::ALL);
-            let block = block.title_alignment(ratatui::layout::Alignment::Center);
-            let text = ratatui::widgets::Paragraph::new(text);
-            let inner = block.inner(f.area());
-            f.render_widget(block, area);
-            f.render_widget(text, inner);
-        })
-        .unwrap();
+pub fn draw(terminal: &mut DefaultTerminal, text: &str) -> Result<(), UAPlayerError> {
+    terminal.draw(|f| {
+        let area = f.area();
+        let block = Block::default().title("UAP").borders(Borders::ALL);
+        let block = block.title_alignment(ratatui::layout::Alignment::Center);
+        let text = ratatui::widgets::Paragraph::new(text);
+        let inner = block.inner(f.area());
+        f.render_widget(block, area);
+        f.render_widget(text, inner);
+    })?;
+
+    Ok(())
 }
 
 fn secs_to_hms(seconds: u64) -> String {

@@ -1,6 +1,10 @@
 use std::io::Write;
 
-use unplugged_audiobook_player::libmpv_handler::{LibMpvEventMessage, LibMpvMessage};
+use unplugged_audiobook_player::{
+    ProgramOption,
+    libmpv_handler::{LibMpvEventMessage, LibMpvMessage},
+    print_help, process_args,
+};
 
 fn main() {
     let logger = unplugged_audiobook_player::logger::Logger::new();
@@ -12,24 +16,37 @@ fn main() {
         logger.flush();
     });
 
-    let file_path = std::env::args()
-        .nth(1)
-        .map_or_else(|| std::fs::read_to_string("last.txt"), Ok)
-        .expect("Provide file path\n");
-
-    let abs_file_path = std::path::absolute(&file_path).unwrap();
-    if !abs_file_path.try_exists().unwrap() {
-        eprintln!("Provide valid file path");
-        std::process::exit(0);
-    }
-    if !is_audiofile(&abs_file_path) {
-        eprintln!("Provide valid audiobook file (.m4b/.mp3)");
-        std::process::exit(0);
-    }
-
-    let mut file = std::fs::File::create(format!("last.txt")).unwrap();
-    file.write_all(abs_file_path.to_str().unwrap().as_bytes())
+    let options = process_args()
+        .map_err(|err| {
+            match err {
+                unplugged_audiobook_player::UAPlayerError::InvalidOption(option) => {
+                    eprintln!("Provided option {option} is invalid")
+                }
+                unplugged_audiobook_player::UAPlayerError::InvalidOptionsStructure => {
+                    eprintln!("Invalid input")
+                }
+                unplugged_audiobook_player::UAPlayerError::InvalidFile => {
+                    eprintln!("Provide valid audiobook file (.m4b/.mp3)")
+                }
+                _ => panic!("{:?}", err),
+            }
+            print_help();
+            std::process::exit(-1);
+        })
         .unwrap();
+    if options.contains(&ProgramOption::PrintHelp) {
+        print_help();
+        std::process::exit(-1);
+    }
+    let file_path = options
+        .iter()
+        .find_map(|o| match o {
+            ProgramOption::PATH(path) => Some(path),
+            _ => None,
+        })
+        .unwrap();
+    let mut file = std::fs::File::create(format!("last.txt")).unwrap();
+    file.write_all(file_path.as_bytes()).unwrap();
     log::debug!("File path: {file_path}");
 
     let time: f64 = if let Ok(str) = std::fs::read_to_string(format!("{file_path}.txt")) {
@@ -37,7 +54,7 @@ fn main() {
     } else {
         0.0
     };
-    log::debug!("Time: {file_path}");
+    log::debug!("Time: {time}");
 
     let (tui_s, tui_r) = crossbeam::channel::unbounded();
     let (libmpv_s, libmpv_r) = crossbeam::channel::unbounded();
@@ -85,16 +102,4 @@ fn main() {
     .unwrap();
 
     log_send.send_quit_signal();
-}
-
-fn is_audiofile(path: &std::path::PathBuf) -> bool {
-    if let Some(ext) = path.extension() {
-        if ext == "m4b" {
-            return true;
-        } else if ext == "mp3" {
-            return true;
-        }
-    }
-
-    false
 }

@@ -7,6 +7,9 @@ use crate::libmpv_handler::{LibMpvEventMessage, LibMpvMessage};
 
 #[derive(Debug)]
 pub enum UAPlayerError {
+    InvalidOption(String),
+    InvalidOptionsStructure,
+    InvalidFile,
     SouvlakiError(souvlaki::Error),
     SystemTimeError(std::time::SystemTimeError),
     IOError(std::io::Error),
@@ -49,4 +52,65 @@ impl From<libmpv2::Error> for UAPlayerError {
     fn from(err: libmpv2::Error) -> Self {
         UAPlayerError::LibMpvError(err)
     }
+}
+
+#[derive(PartialEq)]
+pub enum ProgramOption {
+    PATH(String),
+    PrintHelp,
+}
+
+pub fn process_args() -> Result<Vec<ProgramOption>, UAPlayerError> {
+    let mut options = vec![];
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+
+    let last_arg = args
+        .pop()
+        .or_else(|| std::fs::read_to_string("last.txt").ok())
+        .ok_or(UAPlayerError::InvalidOptionsStructure)?;
+    if last_arg != "--help" {
+        let file_path = last_arg;
+        let abs_file_path = std::path::absolute(&file_path)?;
+        if !abs_file_path.try_exists()? {
+            return Err(UAPlayerError::InvalidFile);
+        }
+        if !is_audiofile(&abs_file_path) {
+            return Err(UAPlayerError::InvalidFile);
+        }
+
+        options.push(ProgramOption::PATH(
+            abs_file_path.to_string_lossy().to_string(),
+        ));
+    } else {
+        args.push(last_arg);
+    }
+
+    for arg in args {
+        let arg = match arg.as_str() {
+            "--help" => Ok(ProgramOption::PrintHelp),
+            _ => Err(UAPlayerError::InvalidOption(arg)),
+        };
+        options.push(arg?);
+    }
+
+    Ok(options)
+}
+
+pub fn print_help() {
+    println!("Usage: {} [OPTIONS] [PATH]", env!("CARGO_PKG_NAME"));
+    println!("       {} --help", env!("CARGO_PKG_NAME"));
+    println!("Options:");
+    println!("\t --help");
+}
+
+fn is_audiofile(path: &std::path::PathBuf) -> bool {
+    if let Some(ext) = path.extension() {
+        if ext == "m4b" {
+            return true;
+        } else if ext == "mp3" {
+            return true;
+        }
+    }
+
+    false
 }

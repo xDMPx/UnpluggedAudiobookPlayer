@@ -1,4 +1,7 @@
-use crate::libmpv_handler::{LibMpvEventMessage, LibMpvMessage};
+use crate::{
+    UAPlayerError,
+    libmpv_handler::{LibMpvEventMessage, LibMpvMessage},
+};
 
 #[derive(Debug)]
 pub enum MCOSInterfaceSignals {
@@ -18,7 +21,7 @@ pub struct MCOSInterface {
 }
 
 impl MCOSInterface {
-    pub fn new(libmpv_s: crossbeam::channel::Sender<LibMpvMessage>) -> Self {
+    pub fn new(libmpv_s: crossbeam::channel::Sender<LibMpvMessage>) -> Result<Self, UAPlayerError> {
         #[cfg(not(target_os = "windows"))]
         let hwnd = None;
 
@@ -37,45 +40,42 @@ impl MCOSInterface {
             hwnd,
         };
 
-        let mut media_controller = souvlaki::MediaControls::new(config).unwrap();
+        let mut media_controller = souvlaki::MediaControls::new(config)?;
 
         // The closure must be Send and have a static lifetime.
-        media_controller
-            .attach(move |event: souvlaki::MediaControlEvent| {
-                log::debug!("MCOSInterface::Event: {event:?}");
-                match event {
-                    souvlaki::MediaControlEvent::Play => {
-                        libmpv_s.send(LibMpvMessage::Resume).unwrap();
-                    }
-                    souvlaki::MediaControlEvent::Pause => {
-                        libmpv_s.send(LibMpvMessage::Pause).unwrap();
-                    }
-                    souvlaki::MediaControlEvent::Previous => {
-                        libmpv_s.send(LibMpvMessage::PrevChapter).unwrap();
-                    }
-                    souvlaki::MediaControlEvent::Next => {
-                        libmpv_s.send(LibMpvMessage::NextChapter).unwrap();
-                    }
-                    _ => (),
+        media_controller.attach(move |event: souvlaki::MediaControlEvent| {
+            log::debug!("MCOSInterface::Event: {event:?}");
+            match event {
+                souvlaki::MediaControlEvent::Play => {
+                    libmpv_s.send(LibMpvMessage::Resume).unwrap();
                 }
-            })
-            .unwrap();
+                souvlaki::MediaControlEvent::Pause => {
+                    libmpv_s.send(LibMpvMessage::Pause).unwrap();
+                }
+                souvlaki::MediaControlEvent::Previous => {
+                    libmpv_s.send(LibMpvMessage::PrevChapter).unwrap();
+                }
+                souvlaki::MediaControlEvent::Next => {
+                    libmpv_s.send(LibMpvMessage::NextChapter).unwrap();
+                }
+                _ => (),
+            }
+        })?;
 
-        MCOSInterface {
+        Ok(MCOSInterface {
             media_controller,
             #[cfg(target_os = "windows")]
             dummy_window,
-        }
+        })
     }
 
     pub fn handle_signals(
         &mut self,
         tui_r: crossbeam::channel::Receiver<crate::libmpv_handler::LibMpvEventMessage>,
-    ) {
+    ) -> Result<(), UAPlayerError> {
         log::debug!("MCOSInterface::handle_signals Start");
         self.media_controller
-            .set_playback(souvlaki::MediaPlayback::Playing { progress: None })
-            .unwrap();
+            .set_playback(souvlaki::MediaPlayback::Playing { progress: None })?;
 
         let mut playback_start = std::time::SystemTime::now();
         let mut playback_start_offset = 0.0;
@@ -107,21 +107,18 @@ impl MCOSInterface {
                                 artist: data.artist.as_deref(),
                                 album: data.album.as_deref(),
                                 ..Default::default()
-                            })
-                            .unwrap();
+                            })?;
                     }
                     LibMpvEventMessage::PlaybackPause => {
                         self.media_controller
-                            .set_playback(souvlaki::MediaPlayback::Paused { progress: None })
-                            .unwrap();
+                            .set_playback(souvlaki::MediaPlayback::Paused { progress: None })?;
 
-                        playback_start_offset += playback_start.elapsed().unwrap().as_secs_f64();
+                        playback_start_offset += playback_start.elapsed()?.as_secs_f64();
                         playback_paused = true;
                     }
                     LibMpvEventMessage::PlaybackResume => {
                         self.media_controller
-                            .set_playback(souvlaki::MediaPlayback::Playing { progress: None })
-                            .unwrap();
+                            .set_playback(souvlaki::MediaPlayback::Playing { progress: None })?;
 
                         playback_start = std::time::SystemTime::now();
                         playback_paused = false;
@@ -137,7 +134,7 @@ impl MCOSInterface {
                     }
                 }
 
-                if update_playback_timer.elapsed().unwrap().as_secs_f64() > 0.25 {
+                if update_playback_timer.elapsed()?.as_secs_f64() > 0.25 {
                     update_playback_timer = std::time::SystemTime::now();
 
                     let playback_time = {
@@ -146,7 +143,7 @@ impl MCOSInterface {
                         } else if playback_paused {
                             playback_start_offset
                         } else {
-                            playback_start_offset + playback_start.elapsed().unwrap().as_secs_f64()
+                            playback_start_offset + playback_start.elapsed()?.as_secs_f64()
                         }
                     };
 
@@ -156,20 +153,20 @@ impl MCOSInterface {
                                 progress: Some(souvlaki::MediaPosition(
                                     std::time::Duration::from_secs_f64(playback_time),
                                 )),
-                            })
-                            .unwrap();
+                            })?;
                     } else {
                         self.media_controller
                             .set_playback(souvlaki::MediaPlayback::Playing {
                                 progress: Some(souvlaki::MediaPosition(
                                     std::time::Duration::from_secs_f64(playback_time),
                                 )),
-                            })
-                            .unwrap();
+                            })?;
                     }
                 }
             }
         }
         log::debug!("MCOSInterface::handle_signals END");
+
+        Ok(())
     }
 }

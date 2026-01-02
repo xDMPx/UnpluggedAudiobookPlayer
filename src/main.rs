@@ -49,7 +49,8 @@ fn main() {
             unplugged_audiobook_player::tui::tui(libmpv_s, tui_r);
         });
         scope.spawn(move |_| {
-            mpv.run(&file_path, time, tui_s, mc_tui_s, libmpv_r);
+            mpv.run(&file_path, time, tui_s, mc_tui_s, libmpv_r)
+                .unwrap();
         });
         scope.spawn(move |_| {
             mc_os_interface.handle_signals(mc_tui_r).unwrap();

@@ -45,20 +45,24 @@ impl MCOSInterface {
         // The closure must be Send and have a static lifetime.
         media_controller.attach(move |event: souvlaki::MediaControlEvent| {
             log::debug!("MCOSInterface::Event: {event:?}");
+            let result;
             match event {
                 souvlaki::MediaControlEvent::Play => {
-                    libmpv_s.send(LibMpvMessage::Resume).unwrap();
+                    result = libmpv_s.send(LibMpvMessage::Resume);
                 }
                 souvlaki::MediaControlEvent::Pause => {
-                    libmpv_s.send(LibMpvMessage::Pause).unwrap();
+                    result = libmpv_s.send(LibMpvMessage::Pause);
                 }
                 souvlaki::MediaControlEvent::Previous => {
-                    libmpv_s.send(LibMpvMessage::PrevChapter).unwrap();
+                    result = libmpv_s.send(LibMpvMessage::PrevChapter);
                 }
                 souvlaki::MediaControlEvent::Next => {
-                    libmpv_s.send(LibMpvMessage::NextChapter).unwrap();
+                    result = libmpv_s.send(LibMpvMessage::NextChapter);
                 }
-                _ => (),
+                _ => result = Ok(()),
+            }
+            if result.is_err() {
+                log::error!("{:?}", result.unwrap_err());
             }
         })?;
 

@@ -188,7 +188,7 @@ pub fn tui(
                 LibMpvEventMessage::ChapterUpdate(chap) => {
                     chapter = Some(chap);
                 }
-                LibMpvEventMessage::Quit => (),
+                LibMpvEventMessage::Quit => break,
             }
         }
     }

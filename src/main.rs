@@ -1,5 +1,7 @@
 use std::io::Write;
 
+use unplugged_audiobook_player::libmpv_handler::{LibMpvEventMessage, LibMpvMessage};
+
 fn main() {
     simplelog::WriteLogger::init(
         simplelog::LevelFilter::Debug,
@@ -39,6 +41,10 @@ fn main() {
     let (libmpv_s, libmpv_r) = crossbeam::channel::unbounded();
     let (mc_tui_s, mc_tui_r) = crossbeam::channel::unbounded();
 
+    let mc_tui_s2 = mc_tui_s.clone();
+    let tui_s2 = tui_s.clone();
+    let libmpv_s2 = libmpv_s.clone();
+
     let mut mpv =
         unplugged_audiobook_player::libmpv_handler::LibMpvHandler::initialize_libmpv(100).unwrap();
     let mut mc_os_interface =
@@ -46,14 +52,32 @@ fn main() {
 
     crossbeam::scope(move |scope| {
         scope.spawn(move |_| {
-            unplugged_audiobook_player::tui::tui(libmpv_s, tui_r).unwrap();
-        });
-        scope.spawn(move |_| {
-            mpv.run(&file_path, time, tui_s, mc_tui_s, libmpv_r)
+            unplugged_audiobook_player::tui::tui(libmpv_s.clone(), tui_r)
+                .map_err(|err| {
+                    let _ = libmpv_s.send(LibMpvMessage::Quit);
+                    let _ = mc_tui_s2.send(LibMpvEventMessage::Quit).unwrap();
+                    err
+                })
                 .unwrap();
         });
         scope.spawn(move |_| {
-            mc_os_interface.handle_signals(mc_tui_r).unwrap();
+            mpv.run(&file_path, time, tui_s.clone(), mc_tui_s.clone(), libmpv_r)
+                .map_err(|err| {
+                    let _ = tui_s.send(LibMpvEventMessage::Quit);
+                    let _ = mc_tui_s.send(LibMpvEventMessage::Quit);
+                    err
+                })
+                .unwrap();
+        });
+        scope.spawn(move |_| {
+            mc_os_interface
+                .handle_signals(mc_tui_r)
+                .map_err(|err| {
+                    let _ = tui_s2.send(LibMpvEventMessage::Quit);
+                    let _ = libmpv_s2.send(LibMpvMessage::Quit);
+                    err
+                })
+                .unwrap();
         });
     })
     .unwrap();

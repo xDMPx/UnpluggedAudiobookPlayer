@@ -3,12 +3,14 @@ use std::io::Write;
 use unplugged_audiobook_player::libmpv_handler::{LibMpvEventMessage, LibMpvMessage};
 
 fn main() {
-    simplelog::WriteLogger::init(
-        simplelog::LevelFilter::Debug,
-        simplelog::Config::default(),
-        std::fs::File::create("debug.log").unwrap(),
-    )
-    .unwrap();
+    let logger = unplugged_audiobook_player::logger::Logger::new();
+    let log_send = unplugged_audiobook_player::logger::LogSender::new(logger.get_signal_send());
+    log::set_boxed_logger(Box::new(log_send.clone())).unwrap();
+    log::set_max_level(log::LevelFilter::Trace);
+    std::thread::spawn(move || {
+        logger.log();
+        logger.flush();
+    });
 
     let file_path = std::env::args()
         .nth(1)
@@ -81,6 +83,8 @@ fn main() {
         });
     })
     .unwrap();
+
+    log_send.send_quit_signal();
 }
 
 fn is_audiofile(path: &std::path::PathBuf) -> bool {

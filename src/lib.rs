@@ -58,6 +58,7 @@ impl From<libmpv2::Error> for UAPlayerError {
 pub enum ProgramOption {
     PATH(String),
     PrintHelp,
+    Verbose,
 }
 
 pub fn process_args() -> Result<Vec<ProgramOption>, UAPlayerError> {
@@ -88,6 +89,7 @@ pub fn process_args() -> Result<Vec<ProgramOption>, UAPlayerError> {
     for arg in args {
         let arg = match arg.as_str() {
             "--help" => Ok(ProgramOption::PrintHelp),
+            "--verbose" => Ok(ProgramOption::Verbose),
             _ => Err(UAPlayerError::InvalidOption(arg)),
         };
         options.push(arg?);
@@ -100,6 +102,7 @@ pub fn print_help() {
     println!("Usage: {} [OPTIONS] [PATH]", env!("CARGO_PKG_NAME"));
     println!("       {} --help", env!("CARGO_PKG_NAME"));
     println!("Options:");
+    println!("\t --verbose");
     println!("\t --help");
 }
 

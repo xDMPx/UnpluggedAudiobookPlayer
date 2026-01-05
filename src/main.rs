@@ -7,15 +7,7 @@ use unplugged_audiobook_player::{
 };
 
 fn main() {
-    let logger = unplugged_audiobook_player::logger::Logger::new();
-    let log_send = unplugged_audiobook_player::logger::LogSender::new(logger.get_signal_send());
-    log::set_boxed_logger(Box::new(log_send.clone())).unwrap();
-    log::set_max_level(log::LevelFilter::Trace);
-    std::thread::spawn(move || {
-        logger.log();
-        logger.flush();
-    });
-
+    let mut log_send: Option<unplugged_audiobook_player::logger::LogSender> = None;
     let options = process_args()
         .map_err(|err| {
             match err {
@@ -38,6 +30,22 @@ fn main() {
         print_help();
         std::process::exit(-1);
     }
+
+    if options.contains(&ProgramOption::Verbose) {
+        let logger = unplugged_audiobook_player::logger::Logger::new();
+        log_send = Some(unplugged_audiobook_player::logger::LogSender::new(
+            logger.get_signal_send(),
+        ));
+        log::set_boxed_logger(Box::new(log_send.as_ref().unwrap().clone())).unwrap();
+        log::set_max_level(log::LevelFilter::Trace);
+
+        std::thread::spawn(move || {
+            logger.log();
+            logger.flush();
+        });
+        log::debug!("Args: {:?}", std::env::args());
+    }
+
     let file_path = options
         .iter()
         .find_map(|o| match o {
@@ -71,6 +79,7 @@ fn main() {
 
     crossbeam::scope(move |scope| {
         scope.spawn(move |_| {
+            log::debug!("TUI: START");
             unplugged_audiobook_player::tui::tui(libmpv_s.clone(), tui_r)
                 .map_err(|err| {
                     let _ = libmpv_s.send(LibMpvMessage::Quit);
@@ -78,8 +87,10 @@ fn main() {
                     err
                 })
                 .unwrap();
+            log::debug!("TUI: END");
         });
         scope.spawn(move |_| {
+            log::debug!("MPV: START");
             mpv.run(&file_path, time, tui_s.clone(), mc_tui_s.clone(), libmpv_r)
                 .map_err(|err| {
                     let _ = tui_s.send(LibMpvEventMessage::Quit);
@@ -87,8 +98,10 @@ fn main() {
                     err
                 })
                 .unwrap();
+            log::debug!("MPV: END");
         });
         scope.spawn(move |_| {
+            log::debug!("MCOSInterface: START");
             mc_os_interface
                 .handle_signals(mc_tui_r)
                 .map_err(|err| {
@@ -97,9 +110,12 @@ fn main() {
                     err
                 })
                 .unwrap();
+            log::debug!("MCOSInterface: END");
         });
     })
     .unwrap();
 
-    log_send.send_quit_signal();
+    if let Some(log_send) = log_send {
+        log_send.send_quit_signal();
+    }
 }

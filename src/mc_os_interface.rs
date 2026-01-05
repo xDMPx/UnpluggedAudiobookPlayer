@@ -61,6 +61,9 @@ impl MCOSInterface {
                     };
                     libmpv_s.send(LibMpvMessage::UpdatePosition(offset))
                 }
+                souvlaki::MediaControlEvent::SetPosition(pos) => {
+                    libmpv_s.send(LibMpvMessage::SetPosition(pos.0.as_secs_f64()))
+                }
                 _ => Ok(()),
             };
             if result.is_err() {

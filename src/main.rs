@@ -46,6 +46,15 @@ fn main() {
         log::debug!("Args: {:?}", std::env::args());
     }
 
+    let volume = if let Some(vol) = options.iter().find_map(|o| match o {
+        ProgramOption::Volume(vol) => Some(*vol),
+        _ => None,
+    }) {
+        vol
+    } else {
+        100
+    };
+
     let file_path = options
         .iter()
         .find_map(|o| match o {
@@ -73,7 +82,8 @@ fn main() {
     let libmpv_s2 = libmpv_s.clone();
 
     let mut mpv =
-        unplugged_audiobook_player::libmpv_handler::LibMpvHandler::initialize_libmpv(100).unwrap();
+        unplugged_audiobook_player::libmpv_handler::LibMpvHandler::initialize_libmpv(volume)
+            .unwrap();
     let mut mc_os_interface =
         unplugged_audiobook_player::mc_os_interface::MCOSInterface::new(libmpv_s.clone()).unwrap();
 

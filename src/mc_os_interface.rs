@@ -137,35 +137,35 @@ impl MCOSInterface {
                         break;
                     }
                 }
+            }
 
-                if update_playback_timer.elapsed()?.as_secs_f64() > 0.25 {
-                    update_playback_timer = std::time::SystemTime::now();
+            if update_playback_timer.elapsed()?.as_secs_f64() > 0.25 {
+                update_playback_timer = std::time::SystemTime::now();
 
-                    let playback_time = {
-                        if !playback_ready {
-                            0.0
-                        } else if playback_paused {
-                            playback_start_offset
-                        } else {
-                            playback_start_offset + playback_start.elapsed()?.as_secs_f64()
-                        }
-                    };
-
-                    if playback_paused {
-                        self.media_controller
-                            .set_playback(souvlaki::MediaPlayback::Paused {
-                                progress: Some(souvlaki::MediaPosition(
-                                    std::time::Duration::from_secs_f64(playback_time),
-                                )),
-                            })?;
+                let playback_time = {
+                    if !playback_ready {
+                        0.0
+                    } else if playback_paused {
+                        playback_start_offset
                     } else {
-                        self.media_controller
-                            .set_playback(souvlaki::MediaPlayback::Playing {
-                                progress: Some(souvlaki::MediaPosition(
-                                    std::time::Duration::from_secs_f64(playback_time),
-                                )),
-                            })?;
+                        playback_start_offset + playback_start.elapsed()?.as_secs_f64()
                     }
+                };
+
+                if playback_paused {
+                    self.media_controller
+                        .set_playback(souvlaki::MediaPlayback::Paused {
+                            progress: Some(souvlaki::MediaPosition(
+                                std::time::Duration::from_secs_f64(playback_time),
+                            )),
+                        })?;
+                } else {
+                    self.media_controller
+                        .set_playback(souvlaki::MediaPlayback::Playing {
+                            progress: Some(souvlaki::MediaPosition(
+                                std::time::Duration::from_secs_f64(playback_time),
+                            )),
+                        })?;
                 }
             }
         }

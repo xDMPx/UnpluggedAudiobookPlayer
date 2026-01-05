@@ -54,6 +54,13 @@ impl MCOSInterface {
                 souvlaki::MediaControlEvent::SetVolume(vol) => {
                     libmpv_s.send(LibMpvMessage::SetVolume((vol * 100.0).floor() as i64))
                 }
+                souvlaki::MediaControlEvent::SeekBy(direction, duration) => {
+                    let offset = match direction {
+                        souvlaki::SeekDirection::Forward => duration.as_secs_f64(),
+                        souvlaki::SeekDirection::Backward => -duration.as_secs_f64(),
+                    };
+                    libmpv_s.send(LibMpvMessage::UpdatePosition(offset))
+                }
                 _ => Ok(()),
             };
             if result.is_err() {
@@ -136,7 +143,6 @@ impl MCOSInterface {
                     }
                 }
             }
-
             if update_playback_timer.elapsed()?.as_secs_f64() > 0.25 {
                 update_playback_timer = std::time::SystemTime::now();
 

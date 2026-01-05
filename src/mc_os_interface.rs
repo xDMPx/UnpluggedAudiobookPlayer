@@ -51,6 +51,9 @@ impl MCOSInterface {
                 souvlaki::MediaControlEvent::Toggle => libmpv_s.send(LibMpvMessage::PlayPause),
                 souvlaki::MediaControlEvent::Previous => libmpv_s.send(LibMpvMessage::PrevChapter),
                 souvlaki::MediaControlEvent::Next => libmpv_s.send(LibMpvMessage::NextChapter),
+                souvlaki::MediaControlEvent::SetVolume(vol) => {
+                    libmpv_s.send(LibMpvMessage::SetVolume((vol * 100.0).floor() as i64))
+                }
                 _ => Ok(()),
             };
             if result.is_err() {
@@ -119,7 +122,10 @@ impl MCOSInterface {
                         playback_start = std::time::SystemTime::now();
                         playback_paused = false;
                     }
-                    LibMpvEventMessage::VolumeUpdate(_) => (),
+                    LibMpvEventMessage::VolumeUpdate(vol) => {
+                        #[cfg(target_os = "linux")]
+                        self.media_controller.set_volume((vol as f64) / 100.0)?;
+                    }
                     LibMpvEventMessage::ChapterUpdate(_) => (),
                     LibMpvEventMessage::PositionUpdate(pos) => {
                         playback_start = std::time::SystemTime::now();

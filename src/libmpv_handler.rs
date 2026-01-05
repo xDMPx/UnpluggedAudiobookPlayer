@@ -5,6 +5,7 @@ use std::io::Write;
 pub enum LibMpvMessage {
     Quit,
     UpdateVolume(i64),
+    SetVolume(i64),
     UpdatePosition(f64),
     Resume,
     Pause,
@@ -130,6 +131,10 @@ impl LibMpvHandler {
                             let mut volume = self.mpv.get_property::<i64>("volume")?;
                             volume += vol;
                             volume = volume.clamp(0, 200);
+                            self.mpv.set_property("volume", volume)?;
+                        }
+                        LibMpvMessage::SetVolume(vol) => {
+                            let volume = vol.clamp(0, 200);
                             self.mpv.set_property("volume", volume)?;
                         }
                         LibMpvMessage::UpdatePosition(offset) => {

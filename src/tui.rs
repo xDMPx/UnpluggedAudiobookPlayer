@@ -1,26 +1,21 @@
+mod commands;
+
 use crate::UAPlayerError;
 use crate::libmpv_handler::{LibMpvEventMessage, LibMpvMessage};
+use crate::tui::commands::{TuiCommand, map_str_to_tuicommand};
 use ratatui::crossterm::event::{self, KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{
     DefaultTerminal,
     widgets::{Block, Borders},
 };
 
-#[derive(Debug)]
-pub enum TuiCommand {
-    Quit,
-    Volume(i64),
-    Seek(f64),
-    PlayPause,
-    NextChapter,
-    PrevChapter,
-}
-
 pub fn tui(
     libmpv_s: crossbeam::channel::Sender<LibMpvMessage>,
     tui_r: crossbeam::channel::Receiver<LibMpvEventMessage>,
 ) -> Result<(), UAPlayerError> {
-    log::debug!("Tui::Start");
+    let mut command_mode = false;
+    let mut command_text = "".to_string();
+
     let commands = std::collections::HashMap::from([
         (
             KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE),
@@ -70,6 +65,14 @@ pub fn tui(
             KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE),
             TuiCommand::PlayPause,
         ),
+        (
+            KeyEvent::new(KeyCode::Char(':'), KeyModifiers::NONE),
+            TuiCommand::EnterCommandMode(true),
+        ),
+        (
+            KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+            TuiCommand::EnterCommandMode(false),
+        ),
     ]);
 
     let mut title = String::new();
@@ -118,24 +121,58 @@ pub fn tui(
             secs_to_hms(playback_duration),
             playback_volume
         ));
-        draw(&mut terminal, &to_draw)?;
+        draw(
+            &mut terminal,
+            &to_draw,
+            if command_mode {
+                Some(&command_text)
+            } else {
+                None
+            },
+        )?;
 
         if event::poll(std::time::Duration::from_millis(16))? {
             let event = event::read();
             if let Ok(event) = event {
                 log::debug!("Tui::Event: {event:?}");
+                let mut command = None;
                 if let event::Event::Key(key) = event {
-                    if let Some(command) = commands.get(&key) {
+                    if command_mode {
+                        if key.code.to_string().len() == 1 {
+                            let c = key.code.to_string().chars().next().unwrap();
+
+                            if c.is_alphanumeric() || c == '-' {
+                                command_text.push(c);
+                            }
+                        } else if key.code == event::KeyCode::Backspace {
+                            let _ = command_text.pop();
+                        } else if key.code == event::KeyCode::Esc {
+                            command_mode = false;
+
+                            command_text = "".to_string();
+                        } else if key.code == event::KeyCode::Enter {
+                            command = map_str_to_tuicommand(&command_text);
+                            command_mode = false;
+                            command_text = "".to_string();
+                        } else if key.code == event::KeyCode::Char(' ') {
+                            command_text.push(' ');
+                        }
+                    } else {
+                        if let Some(key_command) = commands.get(&key) {
+                            command = Some(key_command.clone());
+                        }
+                    }
+                    if let Some(command) = command {
                         match command {
                             TuiCommand::Quit => {
                                 libmpv_s.send(LibMpvMessage::Quit)?;
                                 break;
                             }
                             TuiCommand::Volume(vol) => {
-                                libmpv_s.send(LibMpvMessage::UpdateVolume(*vol))?;
+                                libmpv_s.send(LibMpvMessage::UpdateVolume(vol))?;
                             }
                             TuiCommand::Seek(offset) => {
-                                libmpv_s.send(LibMpvMessage::UpdatePosition(*offset))?;
+                                libmpv_s.send(LibMpvMessage::UpdatePosition(offset))?;
                             }
                             TuiCommand::PlayPause => {
                                 libmpv_s.send(LibMpvMessage::PlayPause)?;
@@ -145,6 +182,9 @@ pub fn tui(
                             }
                             TuiCommand::NextChapter => {
                                 libmpv_s.send(LibMpvMessage::NextChapter)?;
+                            }
+                            TuiCommand::EnterCommandMode(enter) => {
+                                command_mode = enter;
                             }
                         }
                     }
@@ -198,7 +238,11 @@ pub fn tui(
     Ok(())
 }
 
-pub fn draw(terminal: &mut DefaultTerminal, text: &str) -> Result<(), UAPlayerError> {
+pub fn draw(
+    terminal: &mut DefaultTerminal,
+    text: &str,
+    command: Option<&str>,
+) -> Result<(), UAPlayerError> {
     terminal.draw(|f| {
         let area = f.area();
         let block = Block::default().title("UAP").borders(Borders::ALL);
@@ -207,6 +251,13 @@ pub fn draw(terminal: &mut DefaultTerminal, text: &str) -> Result<(), UAPlayerEr
         let inner = block.inner(f.area());
         f.render_widget(block, area);
         f.render_widget(text, inner);
+        if let Some(command) = command {
+            let text = ratatui::widgets::Paragraph::new(":".to_owned() + command);
+            let mut inner = inner;
+            inner.y = inner.height;
+            inner.height = 1;
+            f.render_widget(text, inner);
+        }
     })?;
 
     Ok(())

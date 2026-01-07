@@ -89,6 +89,7 @@ fn main() {
             log::debug!("TUI: START");
             unplugged_audiobook_player::tui::tui(libmpv_s.clone(), tui_r)
                 .map_err(|err| {
+                    log::error!("Tui: {:?}", err);
                     let _ = libmpv_s.send(LibMpvMessage::Quit);
                     let _ = mc_tui_s2.send(LibMpvEventMessage::Quit).unwrap();
                     err
@@ -107,6 +108,7 @@ fn main() {
                 libmpv_r,
             )
             .map_err(|err| {
+                log::error!("MpvHandler: {:?}", err);
                 let _ = tui_s.send(LibMpvEventMessage::Quit);
                 let _ = mc_tui_s.send(LibMpvEventMessage::Quit);
                 err
@@ -119,6 +121,7 @@ fn main() {
             mc_os_interface
                 .handle_signals(mc_tui_r)
                 .map_err(|err| {
+                    log::error!("MCOSInterface: {:?}", err);
                     let _ = tui_s2.send(LibMpvEventMessage::Quit);
                     let _ = libmpv_s2.send(LibMpvMessage::Quit);
                     err

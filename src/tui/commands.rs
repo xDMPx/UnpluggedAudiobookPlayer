@@ -8,6 +8,7 @@ pub enum TuiCommand {
     PrevChapter,
     EnterCommandMode(bool),
     PauseAfter(u64),
+    QuitAfter(u64),
 }
 
 fn quit(_: &mut std::str::SplitWhitespace<'_>) -> Option<TuiCommand> {
@@ -47,6 +48,11 @@ fn pauseafter(args: &mut std::str::SplitWhitespace<'_>) -> Option<TuiCommand> {
     Some(TuiCommand::PauseAfter(time_min))
 }
 
+fn quitafter(args: &mut std::str::SplitWhitespace<'_>) -> Option<TuiCommand> {
+    let time_min: u64 = args.next()?.parse().ok()?;
+    Some(TuiCommand::QuitAfter(time_min))
+}
+
 type CmdFn = fn(&mut std::str::SplitWhitespace<'_>) -> Option<TuiCommand>;
 
 static COMMANDS: phf::Map<
@@ -61,6 +67,7 @@ static COMMANDS: phf::Map<
     "play-next" => playnext as CmdFn,
     "play-prev" => playprev as CmdFn,
     "pause-after" => pauseafter as CmdFn,
+    "quit-after" => quitafter as CmdFn,
 };
 
 pub fn map_str_to_tuicommand(str: &str) -> Option<TuiCommand> {

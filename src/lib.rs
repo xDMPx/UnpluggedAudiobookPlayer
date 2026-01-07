@@ -4,6 +4,8 @@ pub mod mc_os_interface;
 pub mod tui;
 
 use crate::libmpv_handler::{LibMpvEventMessage, LibMpvMessage};
+#[cfg(not(target_os = "linux"))]
+use std::io::Write;
 
 #[derive(Debug)]
 pub enum UAPlayerError {
@@ -68,7 +70,7 @@ pub fn process_args() -> Result<Vec<ProgramOption>, UAPlayerError> {
 
     let last_arg = args
         .pop()
-        .or_else(|| std::fs::read_to_string("last.txt").ok())
+        .or_else(|| load_path_from_config())
         .ok_or(UAPlayerError::InvalidOptionsStructure)?;
     if last_arg != "--help" {
         let file_path = last_arg;
@@ -108,6 +110,46 @@ pub fn process_args() -> Result<Vec<ProgramOption>, UAPlayerError> {
     }
 
     Ok(options)
+}
+
+#[cfg(target_os = "linux")]
+fn load_path_from_config() -> Option<String> {
+    let config_file_path = std::env::var("XDG_CONFIG_HOME")
+        .or(std::env::var("HOME").map(|s| format!("{s}/.config")))
+        .map(|path| format!("{path}/{}/config", env!("CARGO_PKG_NAME")));
+    if let Ok(path) = config_file_path {
+        if std::path::PathBuf::from(&path).is_file() {
+            return std::fs::read_to_string(path).ok();
+        }
+    }
+
+    None
+}
+
+#[cfg(target_os = "linux")]
+pub fn save_path_to_config(path: &str) {
+    let config_dir_path = std::env::var("XDG_CONFIG_HOME")
+        .or(std::env::var("HOME").map(|s| format!("{s}/.config")))
+        .map(|path| format!("{path}/{}", env!("CARGO_PKG_NAME")));
+    if let Ok(dir_path) = config_dir_path {
+        if !std::path::PathBuf::from(&dir_path).is_dir() {
+            std::fs::create_dir(dir_path.clone()).unwrap();
+        }
+        let config_file_path = format!("{dir_path}/config");
+        std::fs::write(config_file_path, path).unwrap();
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn load_path_from_config2() -> Option<String> {
+    std::fs::read_to_string("last.txt").ok()
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn save_path_to_config(path: &str) {
+    let mut file = std::fs::File::create(format!("last.txt")).unwrap();
+    file.write_all(path.as_bytes()).unwrap();
+    log::debug!("File path: {path}");
 }
 
 pub fn print_help() {

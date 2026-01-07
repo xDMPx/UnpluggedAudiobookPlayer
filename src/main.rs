@@ -1,9 +1,7 @@
-use std::io::Write;
-
 use unplugged_audiobook_player::{
     ProgramOption,
     libmpv_handler::{LibMpvEventMessage, LibMpvMessage},
-    print_help, process_args,
+    print_help, process_args, save_path_to_config,
 };
 
 fn main() {
@@ -62,9 +60,7 @@ fn main() {
             _ => None,
         })
         .unwrap();
-    let mut file = std::fs::File::create(format!("last.txt")).unwrap();
-    file.write_all(file_path.as_bytes()).unwrap();
-    log::debug!("File path: {file_path}");
+    save_path_to_config(file_path);
 
     let time: f64 = if let Ok(str) = std::fs::read_to_string(format!("{file_path}.txt")) {
         str.parse().unwrap()

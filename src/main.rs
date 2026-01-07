@@ -84,6 +84,7 @@ fn main() {
     let mut mpv =
         unplugged_audiobook_player::libmpv_handler::LibMpvHandler::initialize_libmpv(volume)
             .unwrap();
+    let mpv_client = mpv.create_client().unwrap();
     let mut mc_os_interface =
         unplugged_audiobook_player::mc_os_interface::MCOSInterface::new(libmpv_s.clone()).unwrap();
 
@@ -101,13 +102,20 @@ fn main() {
         });
         scope.spawn(move |_| {
             log::debug!("MPV: START");
-            mpv.run(&file_path, time, tui_s.clone(), mc_tui_s.clone(), libmpv_r)
-                .map_err(|err| {
-                    let _ = tui_s.send(LibMpvEventMessage::Quit);
-                    let _ = mc_tui_s.send(LibMpvEventMessage::Quit);
-                    err
-                })
-                .unwrap();
+            mpv.run(
+                mpv_client,
+                &file_path,
+                time,
+                tui_s.clone(),
+                mc_tui_s.clone(),
+                libmpv_r,
+            )
+            .map_err(|err| {
+                let _ = tui_s.send(LibMpvEventMessage::Quit);
+                let _ = mc_tui_s.send(LibMpvEventMessage::Quit);
+                err
+            })
+            .unwrap();
             log::debug!("MPV: END");
         });
         scope.spawn(move |_| {

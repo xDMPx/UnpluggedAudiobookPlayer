@@ -47,7 +47,6 @@ pub struct Chapter {
 
 pub struct LibMpvHandler {
     mpv: libmpv2::Mpv,
-    ev_ctx: Option<libmpv2::events::EventContext>,
     chapters: Vec<Chapter>,
 }
 
@@ -59,27 +58,24 @@ impl LibMpvHandler {
 
         Ok(LibMpvHandler {
             mpv,
-            ev_ctx: None,
             chapters: vec![],
         })
     }
 
-    pub fn create_event_context(&mut self) -> Result<(), libmpv2::Error> {
-        let ev_ctx = libmpv2::events::EventContext::new(self.mpv.ctx);
-        ev_ctx.disable_deprecated_events()?;
+    pub fn create_client(&self) -> Result<libmpv2::Mpv, libmpv2::Error> {
+        let client = self.mpv.create_client(None)?;
+        client.disable_deprecated_events()?;
 
-        ev_ctx.observe_property("pause", libmpv2::Format::Flag, 0)?;
-        ev_ctx.observe_property("volume", libmpv2::Format::Int64, 0)?;
-        ev_ctx.observe_property("chapter", libmpv2::Format::Int64, 0)?;
+        client.observe_property("pause", libmpv2::Format::Flag, 0)?;
+        client.observe_property("volume", libmpv2::Format::Int64, 0)?;
+        client.observe_property("chapter", libmpv2::Format::Int64, 0)?;
 
-        self.ev_ctx = Some(ev_ctx);
-
-        Ok(())
+        Ok(client)
     }
 
     pub fn load_file(&self, file: &str) -> Result<(), libmpv2::Error> {
         self.mpv
-            .command("loadfile", &[format!("\"{file}\"").as_str(), "append-play"])
+            .command("loadfile", &[format!("{file}").as_str(), "append-play"])
     }
 
     pub fn fech_chapters(&mut self) -> Result<(), libmpv2::Error> {
@@ -93,191 +89,186 @@ impl LibMpvHandler {
 
     pub fn run(
         &mut self,
+        mut mpv_client: libmpv2::Mpv,
         path: &str,
         time: f64,
         tui_s: crossbeam::channel::Sender<LibMpvEventMessage>,
         mc_os_s: crossbeam::channel::Sender<LibMpvEventMessage>,
         libmpv_r: crossbeam::channel::Receiver<LibMpvMessage>,
     ) -> Result<(), UAPlayerError> {
-        log::debug!("LibMpv::Run Start");
-        self.create_event_context()?;
         self.load_file(path)?;
 
         loop {
-            if let Some(ref mut ev_ctx) = self.ev_ctx {
-                let ev = ev_ctx
-                    .wait_event(0.016)
-                    .unwrap_or(Err(libmpv2::Error::Null));
+            let ev = mpv_client
+                .wait_event(0.016)
+                .unwrap_or(Err(libmpv2::Error::Null));
 
-                if let Ok(msg) = libmpv_r.try_recv() {
-                    log::debug!("LibMpv::LibMpvMessage: {msg:?}");
-                    match msg {
-                        LibMpvMessage::Quit => {
-                            mc_os_s.send(LibMpvEventMessage::Quit)?;
-                            let diff = 5.0;
-                            let mut pos =
-                                self.mpv.get_property::<f64>("time-pos/full").unwrap_or(0.0);
-                            if pos > diff {
-                                pos -= diff;
-                            } else {
-                                pos = 0.0;
-                            }
-                            let mut file = std::fs::File::create(format!("{path}.txt"))?;
-                            file.write_all(pos.to_string().as_bytes())?;
-
-                            self.mpv.command("quit", &["0"])?;
-                            break;
-                        }
-                        LibMpvMessage::UpdateVolume(vol) => {
-                            let mut volume = self.mpv.get_property::<i64>("volume")?;
-                            volume += vol;
-                            volume = volume.clamp(0, 200);
-                            self.mpv.set_property("volume", volume)?;
-                        }
-                        LibMpvMessage::SetVolume(vol) => {
-                            let volume = vol.clamp(0, 200);
-                            self.mpv.set_property("volume", volume)?;
-                        }
-                        LibMpvMessage::UpdatePosition(offset) => {
-                            self.mpv.command("seek", &[&offset.to_string()])?;
-                        }
-                        LibMpvMessage::SetPosition(pos) => {
-                            self.mpv.command("seek", &[&pos.to_string(), "absolute"])?;
-                        }
-                        LibMpvMessage::PlayPause => {
-                            self.mpv.command("cycle", &["pause"])?;
-                        }
-                        LibMpvMessage::PrevChapter => {
-                            if self.chapters.len() > 0 {
-                                let chapter = self.mpv.get_property::<i64>("chapter")? - 1;
-                                if chapter >= 0 {
-                                    self.mpv.set_property("chapter", chapter)?;
-                                }
-                            }
-                        }
-                        LibMpvMessage::NextChapter => {
-                            if self.chapters.len() > 0 {
-                                let chapter = self.mpv.get_property::<i64>("chapter")? + 1;
-                                if chapter < (self.chapters.len() as i64) {
-                                    self.mpv.set_property("chapter", chapter)?;
-                                }
-                            }
-                        }
-                        LibMpvMessage::Resume => {
-                            self.mpv.set_property("pause", false)?;
-                        }
-                        LibMpvMessage::Pause => {
-                            self.mpv.set_property("pause", true)?;
+            if ev.is_ok() {
+                log::debug!("Event {ev:?}");
+            }
+            match ev {
+                Ok(event) => match event {
+                    libmpv2::events::Event::StartFile => {
+                        tui_s.send(LibMpvEventMessage::StartFile)?;
+                        mc_os_s.send(LibMpvEventMessage::StartFile)?;
+                    }
+                    libmpv2::events::Event::PlaybackRestart => {
+                        let pause = self.mpv.get_property::<bool>("pause")?;
+                        tui_s.send(LibMpvEventMessage::PlaybackRestart(pause))?;
+                        mc_os_s.send(LibMpvEventMessage::PlaybackRestart(pause))?;
+                    }
+                    libmpv2::events::Event::PropertyChange {
+                        name: "pause",
+                        change: libmpv2::events::PropertyData::Flag(pause),
+                        ..
+                    } => {
+                        if pause {
+                            tui_s.send(LibMpvEventMessage::PlaybackPause)?;
+                            mc_os_s.send(LibMpvEventMessage::PlaybackPause)?;
+                        } else {
+                            tui_s.send(LibMpvEventMessage::PlaybackResume)?;
+                            mc_os_s.send(LibMpvEventMessage::PlaybackResume)?;
                         }
                     }
-                }
-
-                if ev.is_ok() {
-                    log::debug!("LibMpv::Event {ev:?}");
-                }
-                match ev {
-                    Ok(event) => match event {
-                        libmpv2::events::Event::StartFile => {
-                            tui_s.send(LibMpvEventMessage::StartFile)?;
-                            mc_os_s.send(LibMpvEventMessage::StartFile)?;
-                        }
-                        libmpv2::events::Event::PlaybackRestart => {
-                            let pause = self.mpv.get_property::<bool>("pause")?;
-                            tui_s.send(LibMpvEventMessage::PlaybackRestart(pause))?;
-                            mc_os_s.send(LibMpvEventMessage::PlaybackRestart(pause))?;
-                        }
-                        libmpv2::events::Event::PropertyChange {
-                            name: "pause",
-                            change: libmpv2::events::PropertyData::Flag(pause),
-                            ..
-                        } => {
-                            if pause {
-                                tui_s.send(LibMpvEventMessage::PlaybackPause)?;
-                                mc_os_s.send(LibMpvEventMessage::PlaybackPause)?;
-                            } else {
-                                tui_s.send(LibMpvEventMessage::PlaybackResume)?;
-                                mc_os_s.send(LibMpvEventMessage::PlaybackResume)?;
+                    libmpv2::events::Event::PropertyChange {
+                        name: "volume",
+                        change: libmpv2::events::PropertyData::Int64(volume),
+                        ..
+                    } => {
+                        tui_s.send(LibMpvEventMessage::VolumeUpdate(volume))?;
+                        mc_os_s.send(LibMpvEventMessage::VolumeUpdate(volume))?;
+                    }
+                    libmpv2::events::Event::PropertyChange {
+                        name: "chapter",
+                        change: libmpv2::events::PropertyData::Int64(i),
+                        ..
+                    } => {
+                        if i >= 0 {
+                            if let Some(chapter) = self.chapters.get(i as usize) {
+                                let chapter = chapter.title.clone();
+                                tui_s.send(LibMpvEventMessage::ChapterUpdate(chapter.clone()))?;
+                                mc_os_s.send(LibMpvEventMessage::ChapterUpdate(chapter))?;
                             }
                         }
-                        libmpv2::events::Event::PropertyChange {
-                            name: "volume",
-                            change: libmpv2::events::PropertyData::Int64(volume),
-                            ..
-                        } => {
-                            tui_s.send(LibMpvEventMessage::VolumeUpdate(volume))?;
-                            mc_os_s.send(LibMpvEventMessage::VolumeUpdate(volume))?;
-                        }
-                        libmpv2::events::Event::PropertyChange {
-                            name: "chapter",
-                            change: libmpv2::events::PropertyData::Int64(i),
-                            ..
-                        } => {
-                            if i >= 0 {
-                                if let Some(chapter) = self.chapters.get(i as usize) {
-                                    let chapter = chapter.title.clone();
-                                    tui_s
-                                        .send(LibMpvEventMessage::ChapterUpdate(chapter.clone()))?;
-                                    mc_os_s.send(LibMpvEventMessage::ChapterUpdate(chapter))?;
-                                }
-                            }
-                        }
-                        libmpv2::events::Event::Seek => {
-                            let time_pos = self.mpv.get_property::<f64>("time-pos/full")?;
-                            tui_s.send(LibMpvEventMessage::PositionUpdate(time_pos))?;
-                            mc_os_s.send(LibMpvEventMessage::PositionUpdate(time_pos))?;
-                        }
-                        libmpv2::events::Event::FileLoaded => {
-                            let media_title = self
-                                .mpv
-                                .get_property::<libmpv2::MpvStr>("metadata/by-key/title")?
-                                .to_string();
-                            let duration = self.mpv.get_property::<f64>("duration/full")?;
-                            self.mpv.command("seek", &[&time.to_string(), "absolute"])?;
-                            self.fech_chapters()?;
-                            let chapter = {
-                                if self.chapters.len() > 0 {
-                                    let chapter = self.mpv.get_property::<i64>("chapter")?;
-                                    if let Some(chapter) = self.chapters.get(chapter as usize) {
-                                        Some(chapter.title.clone())
-                                    } else {
-                                        None
-                                    }
+                    }
+                    libmpv2::events::Event::Seek => {
+                        let time_pos = self.mpv.get_property::<f64>("time-pos/full")?;
+                        tui_s.send(LibMpvEventMessage::PositionUpdate(time_pos))?;
+                        mc_os_s.send(LibMpvEventMessage::PositionUpdate(time_pos))?;
+                    }
+                    libmpv2::events::Event::FileLoaded => {
+                        let media_title = self
+                            .mpv
+                            .get_property::<libmpv2::MpvStr>("metadata/by-key/title")?
+                            .to_string();
+                        let duration = self.mpv.get_property::<f64>("duration/full")?;
+                        self.mpv.command("seek", &[&time.to_string(), "absolute"])?;
+                        self.fech_chapters()?;
+                        let chapter = {
+                            if self.chapters.len() > 0 {
+                                let chapter = self.mpv.get_property::<i64>("chapter")?;
+                                if let Some(chapter) = self.chapters.get(chapter as usize) {
+                                    Some(chapter.title.clone())
                                 } else {
                                     None
                                 }
-                            };
-                            let volume = self.mpv.get_property::<i64>("volume")?;
-                            let artist = self
-                                .mpv
-                                .get_property::<libmpv2::MpvStr>("metadata/by-key/artist")
-                                .map(|s| Some(s.to_string()))
-                                .unwrap_or_else(|_| None);
-                            let album = self
-                                .mpv
-                                .get_property::<libmpv2::MpvStr>("metadata/by-key/album")
-                                .map(|s| Some(s.to_string()))
-                                .unwrap_or_else(|_| None);
-                            tui_s.send(LibMpvEventMessage::FileLoaded(FileLoadedData {
-                                media_title: media_title.clone(),
-                                artist: artist.clone(),
-                                album: album.clone(),
-                                duration,
-                                volume,
-                                chapter: chapter.clone(),
-                            }))?;
-                            mc_os_s.send(LibMpvEventMessage::FileLoaded(FileLoadedData {
-                                media_title,
-                                artist,
-                                album,
-                                duration,
-                                volume,
-                                chapter,
-                            }))?;
+                            } else {
+                                None
+                            }
+                        };
+                        let volume = self.mpv.get_property::<i64>("volume")?;
+                        let artist = self
+                            .mpv
+                            .get_property::<libmpv2::MpvStr>("metadata/by-key/artist")
+                            .map(|s| Some(s.to_string()))
+                            .unwrap_or_else(|_| None);
+                        let album = self
+                            .mpv
+                            .get_property::<libmpv2::MpvStr>("metadata/by-key/album")
+                            .map(|s| Some(s.to_string()))
+                            .unwrap_or_else(|_| None);
+                        tui_s.send(LibMpvEventMessage::FileLoaded(FileLoadedData {
+                            media_title: media_title.clone(),
+                            artist: artist.clone(),
+                            album: album.clone(),
+                            duration,
+                            volume,
+                            chapter: chapter.clone(),
+                        }))?;
+                        mc_os_s.send(LibMpvEventMessage::FileLoaded(FileLoadedData {
+                            media_title,
+                            artist,
+                            album,
+                            duration,
+                            volume,
+                            chapter,
+                        }))?;
+                    }
+                    _ => (),
+                },
+                Err(_err) => {
+                    //println!("ERR: {err:?}");
+                }
+            }
+
+            if let Ok(msg) = libmpv_r.try_recv() {
+                log::debug!("LibMpv::LibMpvMessage: {msg:?}");
+                match msg {
+                    LibMpvMessage::Quit => {
+                        mc_os_s.send(LibMpvEventMessage::Quit)?;
+                        let diff = 5.0;
+                        let mut pos = self.mpv.get_property::<f64>("time-pos/full").unwrap_or(0.0);
+                        if pos > diff {
+                            pos -= diff;
+                        } else {
+                            pos = 0.0;
                         }
-                        _ => (),
-                    },
-                    Err(_err) => {
-                        //println!("ERR: {err:?}");
+                        let mut file = std::fs::File::create(format!("{path}.txt"))?;
+                        file.write_all(pos.to_string().as_bytes())?;
+
+                        self.mpv.command("quit", &["0"])?;
+                        break;
+                    }
+                    LibMpvMessage::UpdateVolume(vol) => {
+                        let mut volume = self.mpv.get_property::<i64>("volume")?;
+                        volume += vol;
+                        volume = volume.clamp(0, 200);
+                        self.mpv.set_property("volume", volume)?;
+                    }
+                    LibMpvMessage::SetVolume(vol) => {
+                        let volume = vol.clamp(0, 200);
+                        self.mpv.set_property("volume", volume)?;
+                    }
+                    LibMpvMessage::UpdatePosition(offset) => {
+                        self.mpv.command("seek", &[&offset.to_string()])?;
+                    }
+                    LibMpvMessage::SetPosition(pos) => {
+                        self.mpv.command("seek", &[&pos.to_string(), "absolute"])?;
+                    }
+                    LibMpvMessage::PlayPause => {
+                        self.mpv.command("cycle", &["pause"])?;
+                    }
+                    LibMpvMessage::PrevChapter => {
+                        if self.chapters.len() > 0 {
+                            let chapter = self.mpv.get_property::<i64>("chapter")? - 1;
+                            if chapter >= 0 {
+                                self.mpv.set_property("chapter", chapter)?;
+                            }
+                        }
+                    }
+                    LibMpvMessage::NextChapter => {
+                        if self.chapters.len() > 0 {
+                            let chapter = self.mpv.get_property::<i64>("chapter")? + 1;
+                            if chapter < (self.chapters.len() as i64) {
+                                self.mpv.set_property("chapter", chapter)?;
+                            }
+                        }
+                    }
+                    LibMpvMessage::Resume => {
+                        self.mpv.set_property("pause", false)?;
+                    }
+                    LibMpvMessage::Pause => {
+                        self.mpv.set_property("pause", true)?;
                     }
                 }
             }

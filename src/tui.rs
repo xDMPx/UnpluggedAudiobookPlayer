@@ -89,7 +89,21 @@ pub fn tui(
     let mut playback_duration = 0;
     let mut playback_volume = 0;
 
+    let mut pause_after = None;
+    let mut pause_after_timer: Option<std::time::SystemTime> = None;
+    let mut pause_after_duration: Option<std::time::Duration> = None;
+
     loop {
+        let mut timer_text = None;
+        if let Some(pause_after_timer) = pause_after_timer {
+            let elapsed = pause_after_timer.elapsed();
+            let pause_after_duration = pause_after_duration.unwrap();
+            if let Ok(elapsed) = elapsed {
+                let pause_time_left: std::time::Duration =
+                    pause_after_duration.saturating_sub(elapsed);
+                timer_text = Some(format!("P: {}", secs_to_hms(pause_time_left.as_secs())));
+            }
+        }
         let playback_time = {
             if !playback_ready {
                 0.0
@@ -136,6 +150,7 @@ pub fn tui(
             } else {
                 Some(&command_error)
             },
+            timer_text.as_deref(),
         )?;
 
         if event::poll(std::time::Duration::from_millis(16))? {
@@ -194,6 +209,13 @@ pub fn tui(
                             TuiCommand::NextChapter => {
                                 libmpv_s.send(LibMpvMessage::NextChapter)?;
                             }
+                            TuiCommand::PauseAfter(min) => {
+                                pause_after = Some(crossbeam::channel::after(
+                                    std::time::Duration::from_mins(min),
+                                ));
+                                pause_after_duration = Some(std::time::Duration::from_mins(min));
+                                pause_after_timer = Some(std::time::SystemTime::now());
+                            }
                             TuiCommand::EnterCommandMode(enter) => {
                                 command_mode = enter;
                             }
@@ -242,7 +264,16 @@ pub fn tui(
                 LibMpvEventMessage::Quit => break,
             }
         }
+
+        if pause_after
+            .as_ref()
+            .and_then(|x| x.try_recv().ok())
+            .is_some()
+        {
+            libmpv_s.send(LibMpvMessage::Pause)?;
+        }
     }
+
     ratatui::restore();
     log::debug!("Tui::End");
 
@@ -254,6 +285,7 @@ pub fn draw(
     text: &str,
     command: Option<&str>,
     error: Option<&str>,
+    timer_text: Option<&str>,
 ) -> Result<(), UAPlayerError> {
     terminal.draw(|f| {
         let area = f.area();
@@ -274,6 +306,14 @@ pub fn draw(
             let text = ratatui::widgets::Paragraph::new(":".to_owned() + command);
             let mut inner = inner;
             inner.y = inner.height;
+            inner.height = 1;
+            f.render_widget(text, inner);
+        }
+        if let Some(timer_text) = timer_text {
+            let text = ratatui::widgets::Paragraph::new(timer_text);
+            let mut inner = inner;
+            inner.y = inner.height;
+            inner.x = inner.width - timer_text.chars().count() as u16;
             inner.height = 1;
             f.render_widget(text, inner);
         }

@@ -210,6 +210,9 @@ pub fn tui(
                             TuiCommand::Volume(vol) => {
                                 libmpv_s.send(LibMpvMessage::UpdateVolume(vol))?;
                             }
+                            TuiCommand::SetVolume(vol) => {
+                                libmpv_s.send(LibMpvMessage::SetVolume(vol))?;
+                            }
                             TuiCommand::Seek(offset) => {
                                 libmpv_s.send(LibMpvMessage::UpdatePosition(offset))?;
                             }

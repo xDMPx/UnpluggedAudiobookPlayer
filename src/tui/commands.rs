@@ -2,6 +2,7 @@
 pub enum TuiCommand {
     Quit,
     Volume(i64),
+    SetVolume(i64),
     Seek(f64),
     PlayPause,
     NextChapter,
@@ -27,7 +28,9 @@ fn vol(args: &mut std::str::SplitWhitespace<'_>) -> Option<TuiCommand> {
         volume = volume.clamp(-200, 200);
         Some(TuiCommand::Volume(volume))
     } else {
-        None
+        let mut volume: i64 = arg.parse().ok()?;
+        volume = volume.clamp(-200, 200);
+        Some(TuiCommand::SetVolume(volume))
     }
 }
 

@@ -83,6 +83,15 @@ fn quitafter(args: &mut std::str::SplitWhitespace<'_>) -> Option<TuiCommand> {
     Some(TuiCommand::QuitAfter(time_min))
 }
 
+fn view(args: &mut std::str::SplitWhitespace<'_>) -> Option<TuiCommand> {
+    let arg = args.next()?;
+    match arg {
+        "player" => Some(TuiCommand::State(TuiState::Player)),
+        "help" => Some(TuiCommand::State(TuiState::Help)),
+        _ => None,
+    }
+}
+
 type CmdFn = fn(&mut std::str::SplitWhitespace<'_>) -> Option<TuiCommand>;
 
 static COMMANDS: phf::Map<
@@ -98,6 +107,7 @@ static COMMANDS: phf::Map<
     "play-prev" => playprev as CmdFn,
     "pause-after" => pauseafter as CmdFn,
     "quit-after" => quitafter as CmdFn,
+    "view" => view as CmdFn,
 };
 
 pub fn map_str_to_tuicommand(str: &str) -> Option<TuiCommand> {

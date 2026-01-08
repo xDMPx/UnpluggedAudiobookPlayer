@@ -487,7 +487,7 @@ pub fn generate_help_str(
     writeln!(
         help_str,
         "{:min_width$} {:min_width$}",
-        "global", "view <player|history|help>"
+        "global", "view <player|help>"
     )
     .unwrap();
 

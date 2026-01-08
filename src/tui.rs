@@ -17,6 +17,7 @@ pub fn tui(
     let mut command_mode = false;
     let mut command_text = "".to_string();
     let mut command_error = "".to_string();
+    let mut cursor_position: u16 = 0;
 
     let keybindings = std::collections::HashMap::from([
         (
@@ -158,6 +159,7 @@ pub fn tui(
             } else {
                 None
             },
+            cursor_position,
             if command_error.trim().is_empty() {
                 None
             } else {
@@ -176,16 +178,25 @@ pub fn tui(
                     if command_mode {
                         if key.code.to_string().len() == 1 {
                             let c = key.code.to_string().chars().next().unwrap();
-
-                            if c.is_alphanumeric() || c == '-' {
-                                command_text.push(c);
+                            if c.is_alphanumeric() || c == '-' || c == '+' {
+                                if cursor_position == command_text.len() as u16 {
+                                    command_text.push(c);
+                                } else {
+                                    command_text.insert(cursor_position.into(), c);
+                                }
+                                cursor_position += 1;
                             }
                         } else if key.code == event::KeyCode::Backspace {
-                            let _ = command_text.pop();
+                            if !command_text.is_empty() && cursor_position > 0 {
+                                command_text.remove((cursor_position.saturating_sub(1)).into());
+                                if cursor_position > 0 {
+                                    cursor_position -= 1;
+                                }
+                            }
                         } else if key.code == event::KeyCode::Esc {
                             command_mode = false;
-
                             command_text = "".to_string();
+                            cursor_position = 0;
                         } else if key.code == event::KeyCode::Enter {
                             command = map_str_to_tuicommand(&command_text);
                             if command.is_none() && !command_text.trim().is_empty() {
@@ -193,8 +204,20 @@ pub fn tui(
                             }
                             command_mode = false;
                             command_text = "".to_string();
+                            cursor_position = 0;
                         } else if key.code == event::KeyCode::Char(' ') {
-                            command_text.push(' ');
+                            if cursor_position == command_text.len() as u16 {
+                                command_text.push(' ');
+                                cursor_position += 1;
+                            }
+                        } else if key.code == event::KeyCode::Left {
+                            if cursor_position > 0 {
+                                cursor_position -= 1;
+                            }
+                        } else if key.code == event::KeyCode::Right
+                            && cursor_position < command_text.len() as u16
+                        {
+                            cursor_position += 1;
                         }
                     } else {
                         if let Some(key_command) = keybindings.get(&key) {
@@ -322,6 +345,7 @@ pub fn draw(
     terminal: &mut DefaultTerminal,
     text: &str,
     command: Option<&str>,
+    cursor_position: u16,
     error: Option<&str>,
     timer_text: Option<&str>,
 ) -> Result<(), UAPlayerError> {
@@ -346,6 +370,10 @@ pub fn draw(
             inner.y = inner.height;
             inner.height = 1;
             f.render_widget(text, inner);
+            f.set_cursor_position(ratatui::layout::Position::new(
+                inner.x + 1 + cursor_position,
+                inner.y,
+            ));
         }
         if let Some(timer_text) = timer_text {
             let text = ratatui::widgets::Paragraph::new(timer_text);

@@ -18,7 +18,7 @@ pub fn tui(
     let mut command_text = "".to_string();
     let mut command_error = "".to_string();
 
-    let commands = std::collections::HashMap::from([
+    let keybindings = std::collections::HashMap::from([
         (
             KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE),
             TuiCommand::Quit,
@@ -197,7 +197,7 @@ pub fn tui(
                             command_text.push(' ');
                         }
                     } else {
-                        if let Some(key_command) = commands.get(&key) {
+                        if let Some(key_command) = keybindings.get(&key) {
                             command = Some(key_command.clone());
                         }
                     }

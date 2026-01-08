@@ -1,5 +1,6 @@
 #[derive(Debug, Clone)]
 pub enum TuiCommand {
+    State(TuiState),
     Quit,
     Volume(i64),
     SetVolume(i64),
@@ -10,6 +11,12 @@ pub enum TuiCommand {
     EnterCommandMode(bool),
     PauseAfter(u64),
     QuitAfter(u64),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum TuiState {
+    Player,
+    Help,
 }
 
 fn quit(_: &mut std::str::SplitWhitespace<'_>) -> Option<TuiCommand> {

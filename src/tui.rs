@@ -2,13 +2,14 @@ mod commands;
 
 use crate::UAPlayerError;
 use crate::libmpv_handler::{LibMpvEventMessage, LibMpvMessage};
-use crate::tui::commands::{TuiCommand, map_str_to_tuicommand};
+use crate::tui::commands::{TuiCommand, TuiState, map_str_to_tuicommand};
 use ratatui::crossterm::event::{self, KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{
     DefaultTerminal,
     style::Stylize,
     widgets::{Block, Borders},
 };
+use std::fmt::Write;
 
 pub fn tui(
     libmpv_s: crossbeam::channel::Sender<LibMpvMessage>,
@@ -21,62 +22,71 @@ pub fn tui(
 
     let keybindings = std::collections::HashMap::from([
         (
+            KeyEvent::new(KeyCode::Char('1'), KeyModifiers::NONE),
+            (TuiCommand::State(TuiState::Player), Some("view player")),
+        ),
+        (
+            KeyEvent::new(KeyCode::Char('0'), KeyModifiers::NONE),
+            (TuiCommand::State(TuiState::Help), Some("view help")),
+        ),
+        (
             KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE),
-            TuiCommand::Quit,
+            (TuiCommand::Quit, Some("quit, q")),
         ),
         (
             KeyEvent::new(KeyCode::Char('{'), KeyModifiers::NONE),
-            TuiCommand::Volume(-1),
+            (TuiCommand::Volume(-1), Some("vol -1")),
         ),
         (
             KeyEvent::new(KeyCode::Char('}'), KeyModifiers::NONE),
-            TuiCommand::Volume(1),
+            (TuiCommand::Volume(1), Some("vol +1")),
         ),
         (
             KeyEvent::new(KeyCode::Char('['), KeyModifiers::NONE),
-            TuiCommand::Volume(-10),
+            (TuiCommand::Volume(-10), Some("vol -10")),
         ),
         (
             KeyEvent::new(KeyCode::Char(']'), KeyModifiers::NONE),
-            TuiCommand::Volume(10),
+            (TuiCommand::Volume(10), Some("vol +10")),
         ),
         (
             KeyEvent::new(KeyCode::Left, KeyModifiers::NONE),
-            TuiCommand::Seek(-10.0),
+            (TuiCommand::Seek(-10.0), Some("seek -10")),
         ),
         (
             KeyEvent::new(KeyCode::Left, KeyModifiers::SHIFT),
-            TuiCommand::Seek(-60.0),
+            (TuiCommand::Seek(-60.0), Some("seek -60")),
         ),
         (
             KeyEvent::new(KeyCode::Right, KeyModifiers::NONE),
-            TuiCommand::Seek(10.0),
+            (TuiCommand::Seek(10.0), Some("seek +10")),
         ),
         (
             KeyEvent::new(KeyCode::Right, KeyModifiers::SHIFT),
-            TuiCommand::Seek(60.0),
+            (TuiCommand::Seek(60.0), Some("seek -60")),
         ),
         (
             KeyEvent::new(KeyCode::Char('z'), KeyModifiers::NONE),
-            TuiCommand::PrevChapter,
+            (TuiCommand::PrevChapter, Some("play-prev")),
         ),
         (
             KeyEvent::new(KeyCode::Char('b'), KeyModifiers::NONE),
-            TuiCommand::NextChapter,
+            (TuiCommand::NextChapter, Some("play-next")),
         ),
         (
             KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE),
-            TuiCommand::PlayPause,
+            (TuiCommand::PlayPause, Some("play-pause")),
         ),
         (
             KeyEvent::new(KeyCode::Char(':'), KeyModifiers::NONE),
-            TuiCommand::EnterCommandMode(true),
+            (TuiCommand::EnterCommandMode(true), None),
         ),
         (
             KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
-            TuiCommand::EnterCommandMode(false),
+            (TuiCommand::EnterCommandMode(false), None),
         ),
     ]);
+    let mut tui_state = TuiState::Player;
 
     let mut title = String::new();
     let mut artist: Option<String> = None;
@@ -118,55 +128,78 @@ pub fn tui(
             }
         }
 
-        let playback_time = {
-            if !playback_ready {
-                0.0
-            } else if playback_paused {
-                playback_start_offset
-            } else {
-                playback_start_offset + playback_start.elapsed()?.as_secs_f64()
+        match tui_state {
+            TuiState::Player => {
+                let playback_time = {
+                    if !playback_ready {
+                        0.0
+                    } else if playback_paused {
+                        playback_start_offset
+                    } else {
+                        playback_start_offset + playback_start.elapsed()?.as_secs_f64()
+                    }
+                };
+                let mut playback_time = playback_time.floor() as u64;
+                playback_time = playback_time.min(playback_duration);
+                let symbol = {
+                    if !playback_ready || playback_paused {
+                        "|"
+                    } else {
+                        ">"
+                    }
+                };
+                let mut to_draw = title.clone();
+                if let Some(ref artist) = artist {
+                    to_draw.push_str(" by ");
+                    to_draw.push_str(artist);
+                }
+                if let Some(chapter) = chapter.as_ref() {
+                    to_draw.push_str(&format!("\n{chapter}",));
+                }
+                to_draw.push_str(&format!(
+                    "\n{} {} / {} vol: {}",
+                    symbol,
+                    secs_to_hms(playback_time),
+                    secs_to_hms(playback_duration),
+                    playback_volume
+                ));
+                draw(
+                    &mut terminal,
+                    &to_draw,
+                    if command_mode {
+                        Some(&command_text)
+                    } else {
+                        None
+                    },
+                    cursor_position,
+                    if command_error.trim().is_empty() {
+                        None
+                    } else {
+                        Some(&command_error)
+                    },
+                    timer_text.as_deref(),
+                )?;
             }
-        };
-        let mut playback_time = playback_time.floor() as u64;
-        playback_time = playback_time.min(playback_duration);
-        let symbol = {
-            if !playback_ready || playback_paused {
-                "|"
-            } else {
-                ">"
+            TuiState::Help => {
+                let to_draw = generate_help_str(&keybindings);
+                draw(
+                    &mut terminal,
+                    &to_draw,
+                    if command_mode {
+                        Some(&command_text)
+                    } else {
+                        None
+                    },
+                    cursor_position,
+                    if command_error.trim().is_empty() {
+                        None
+                    } else {
+                        Some(&command_error)
+                    },
+                    timer_text.as_deref(),
+                )?;
             }
-        };
-        let mut to_draw = title.clone();
-        if let Some(ref artist) = artist {
-            to_draw.push_str(" by ");
-            to_draw.push_str(artist);
         }
-        if let Some(chapter) = chapter.as_ref() {
-            to_draw.push_str(&format!("\n{chapter}",));
-        }
-        to_draw.push_str(&format!(
-            "\n{} {} / {} vol: {}",
-            symbol,
-            secs_to_hms(playback_time),
-            secs_to_hms(playback_duration),
-            playback_volume
-        ));
-        draw(
-            &mut terminal,
-            &to_draw,
-            if command_mode {
-                Some(&command_text)
-            } else {
-                None
-            },
-            cursor_position,
-            if command_error.trim().is_empty() {
-                None
-            } else {
-                Some(&command_error)
-            },
-            timer_text.as_deref(),
-        )?;
 
         if event::poll(std::time::Duration::from_millis(16))? {
             let event = event::read();
@@ -219,13 +252,14 @@ pub fn tui(
                         {
                             cursor_position += 1;
                         }
-                    } else {
-                        if let Some(key_command) = keybindings.get(&key) {
-                            command = Some(key_command.clone());
-                        }
+                    } else if let Some((key_command, _)) = keybindings.get(&key) {
+                        command = Some(key_command.clone());
                     }
                     if let Some(command) = command {
                         match command {
+                            TuiCommand::State(state) => {
+                                tui_state = state.clone();
+                            }
                             TuiCommand::Quit => {
                                 libmpv_s.send(LibMpvMessage::Quit)?;
                                 break;
@@ -394,4 +428,106 @@ fn secs_to_hms(seconds: u64) -> String {
     let s = seconds - h * 3600 - m * 60;
 
     format!("{h:02}:{m:02}:{s:02}")
+}
+
+pub fn generate_help_str(
+    keybindings: &std::collections::HashMap<KeyEvent, (TuiCommand, Option<&str>)>,
+) -> String {
+    let mut help_str = String::new();
+    let min_width = 12;
+
+    writeln!(help_str, "Commands:").unwrap();
+    writeln!(help_str, "{:min_width$} {:min_width$}", "global", "quit, q").unwrap();
+    writeln!(
+        help_str,
+        "{:min_width$} {:min_width$}",
+        "global", "vol=[+|-]<i64>"
+    )
+    .unwrap();
+    writeln!(
+        help_str,
+        "{:min_width$} {:min_width$}",
+        "global", "seek=[+|-]<f64>"
+    )
+    .unwrap();
+    writeln!(
+        help_str,
+        "{:min_width$} {:min_width$}",
+        "global", "play-pause"
+    )
+    .unwrap();
+    writeln!(help_str, "{:min_width$} {:min_width$}", "global", "stop").unwrap();
+    writeln!(
+        help_str,
+        "{:min_width$} {:min_width$}",
+        "global", "play-next"
+    )
+    .unwrap();
+    writeln!(
+        help_str,
+        "{:min_width$} {:min_width$}",
+        "global", "play-prev"
+    )
+    .unwrap();
+    writeln!(
+        help_str,
+        "{:min_width$} {:min_width$}",
+        "global", "pause-after=<u64>"
+    )
+    .unwrap();
+    writeln!(
+        help_str,
+        "{:min_width$} {:min_width$}",
+        "global", "quit-after=<u64>"
+    )
+    .unwrap();
+    writeln!(
+        help_str,
+        "{:min_width$} {:min_width$}",
+        "global", "view <player|history|help>"
+    )
+    .unwrap();
+
+    help_str.push('\n');
+
+    writeln!(help_str, "Keybindings:").unwrap();
+    let mut keybindings_help_str = vec![];
+    for (key_event, (_, description)) in keybindings {
+        let mut help_str = String::new();
+        if let Some(description) = description {
+            help_str += &match key_event.code {
+                KeyCode::Char(' ') => format!(
+                    "{:min_width$}  {:min_width$}  {description}",
+                    "global", "space"
+                ),
+
+                KeyCode::Char(c) => {
+                    format!(
+                        "{:min_width$}  {:min_width$}  {description}",
+                        "global",
+                        if key_event.modifiers == KeyModifiers::NONE {
+                            c.to_string()
+                        } else {
+                            format!("{c}+{}", key_event.modifiers.to_string())
+                        }
+                    )
+                }
+                key_code => format!(
+                    "{:min_width$}  {:min_width$}  {description}",
+                    "global",
+                    if key_event.modifiers == KeyModifiers::NONE {
+                        key_code.to_string()
+                    } else {
+                        format!("{key_code}+{}", key_event.modifiers.to_string())
+                    }
+                ),
+            };
+            keybindings_help_str.push(help_str);
+        }
+    }
+
+    keybindings_help_str.sort_unstable_by_key(|str| str.split("  ").last().unwrap().to_string());
+    help_str.push_str(&keybindings_help_str.join("\n"));
+
+    help_str
 }

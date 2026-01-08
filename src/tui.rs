@@ -273,6 +273,9 @@ pub fn tui(
                             TuiCommand::Seek(offset) => {
                                 libmpv_s.send(LibMpvMessage::UpdatePosition(offset))?;
                             }
+                            TuiCommand::SetPosition(pos) => {
+                                libmpv_s.send(LibMpvMessage::SetPosition(pos))?;
+                            }
                             TuiCommand::PlayPause => {
                                 libmpv_s.send(LibMpvMessage::PlayPause)?;
                             }

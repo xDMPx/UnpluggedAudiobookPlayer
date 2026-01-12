@@ -1,7 +1,7 @@
 mod commands;
 
 use crate::UAPlayerError;
-use crate::libmpv_handler::{LibMpvEventMessage, LibMpvMessage};
+use crate::libmpv_handler::{Chapter, LibMpvEventMessage, LibMpvMessage};
 use crate::tui::commands::{
     TuiCommand, TuiState, generate_completion_suggestions, map_str_to_tuicommand,
 };
@@ -28,6 +28,10 @@ pub fn tui(
         (
             KeyEvent::new(KeyCode::Char('1'), KeyModifiers::NONE),
             (TuiCommand::State(TuiState::Player), Some("view player")),
+        ),
+        (
+            KeyEvent::new(KeyCode::Char('2'), KeyModifiers::NONE),
+            (TuiCommand::State(TuiState::Chapters), Some("view chapters")),
         ),
         (
             KeyEvent::new(KeyCode::Char('0'), KeyModifiers::NONE),
@@ -95,6 +99,7 @@ pub fn tui(
     let mut title = String::new();
     let mut artist: Option<String> = None;
     let mut chapter: Option<String> = None;
+    let mut chapters: Vec<Chapter> = vec![];
     let mut terminal = ratatui::init();
 
     let mut playback_start = std::time::SystemTime::now();
@@ -167,6 +172,28 @@ pub fn tui(
                     secs_to_hms(playback_duration),
                     playback_volume
                 ));
+                draw(
+                    &mut terminal,
+                    &to_draw,
+                    if command_mode {
+                        Some(&command_text)
+                    } else {
+                        None
+                    },
+                    cursor_position,
+                    if command_error.trim().is_empty() {
+                        None
+                    } else {
+                        Some(&command_error)
+                    },
+                    timer_text.as_deref(),
+                )?;
+            }
+            TuiState::Chapters => {
+                let mut to_draw = "".to_string();
+                chapters
+                    .iter()
+                    .for_each(|x| to_draw.push_str(&format!("{}\n", x.title)));
                 draw(
                     &mut terminal,
                     &to_draw,
@@ -365,6 +392,7 @@ pub fn tui(
                     playback_volume = data.volume;
                     title = data.media_title;
                     chapter = data.chapter;
+                    chapters = data.chapters;
                     artist = data.artist;
                 }
                 LibMpvEventMessage::PlaybackPause => {
@@ -521,7 +549,7 @@ pub fn generate_help_str(
     writeln!(
         help_str,
         "{:min_width$} {:min_width$}",
-        "global", "view <player|help>"
+        "global", "view <player|chapters|help>"
     )
     .unwrap();
 

@@ -36,11 +36,12 @@ pub struct FileLoadedData {
     pub duration: f64,
     pub volume: i64,
     pub chapter: Option<String>,
+    pub chapters: Vec<Chapter>,
 }
 
-#[derive(serde::Deserialize, Debug)]
+#[derive(serde::Deserialize, Debug, Clone)]
 pub struct Chapter {
-    title: String,
+    pub title: String,
     #[allow(dead_code)]
     time: f32,
 }
@@ -187,6 +188,7 @@ impl LibMpvHandler {
                             .get_property::<libmpv2::MpvStr>("metadata/by-key/album")
                             .map(|s| Some(s.to_string()))
                             .unwrap_or_else(|_| None);
+
                         tui_s.send(LibMpvEventMessage::FileLoaded(FileLoadedData {
                             media_title: media_title.clone(),
                             artist: artist.clone(),
@@ -194,6 +196,7 @@ impl LibMpvHandler {
                             duration,
                             volume,
                             chapter: chapter.clone(),
+                            chapters: self.chapters.clone(),
                         }))?;
                         mc_os_s.send(LibMpvEventMessage::FileLoaded(FileLoadedData {
                             media_title,
@@ -202,6 +205,7 @@ impl LibMpvHandler {
                             duration,
                             volume,
                             chapter,
+                            chapters: vec![],
                         }))?;
                     }
                     _ => (),

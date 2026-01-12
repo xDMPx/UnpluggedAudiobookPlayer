@@ -17,6 +17,7 @@ pub enum TuiCommand {
 #[derive(Debug, Clone, PartialEq)]
 pub enum TuiState {
     Player,
+    Chapters,
     Help,
 }
 
@@ -87,6 +88,7 @@ fn view(args: &mut std::str::SplitWhitespace<'_>) -> Option<TuiCommand> {
     let arg = args.next()?;
     match arg {
         "player" => Some(TuiCommand::State(TuiState::Player)),
+        "chapters" => Some(TuiCommand::State(TuiState::Chapters)),
         "help" => Some(TuiCommand::State(TuiState::Help)),
         _ => None,
     }

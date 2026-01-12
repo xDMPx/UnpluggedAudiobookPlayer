@@ -42,8 +42,7 @@ pub struct FileLoadedData {
 #[derive(serde::Deserialize, Debug, Clone)]
 pub struct Chapter {
     pub title: String,
-    #[allow(dead_code)]
-    time: f32,
+    pub time: f32,
 }
 
 pub struct LibMpvHandler {

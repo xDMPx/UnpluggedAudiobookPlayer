@@ -1,7 +1,7 @@
 mod commands;
 
 use crate::UAPlayerError;
-use crate::libmpv_handler::{Chapter, LibMpvEventMessage, LibMpvMessage};
+use crate::libmpv_handler::{LibMpvEventMessage, LibMpvMessage};
 use crate::tui::commands::{
     TuiCommand, TuiState, generate_completion_suggestions, map_str_to_tuicommand,
 };
@@ -12,6 +12,12 @@ use ratatui::{
     widgets::{Block, Borders},
 };
 use std::fmt::Write;
+
+struct Chapter {
+    title: String,
+    start_time: String,
+    end_time: String,
+}
 
 pub fn tui(
     libmpv_s: crossbeam::channel::Sender<LibMpvMessage>,
@@ -191,9 +197,12 @@ pub fn tui(
             }
             TuiState::Chapters => {
                 let mut to_draw = "".to_string();
-                chapters
-                    .iter()
-                    .for_each(|x| to_draw.push_str(&format!("{}\n", x.title)));
+                chapters.iter().for_each(|x| {
+                    to_draw.push_str(&format!(
+                        "{} || {} - {}\n",
+                        x.title, x.start_time, x.end_time
+                    ));
+                });
                 draw(
                     &mut terminal,
                     &to_draw,
@@ -392,8 +401,21 @@ pub fn tui(
                     playback_volume = data.volume;
                     title = data.media_title;
                     chapter = data.chapter;
-                    chapters = data.chapters;
+                    chapters = data
+                        .chapters
+                        .iter()
+                        .map(|c| Chapter {
+                            title: c.title.clone(),
+                            start_time: secs_to_hms(c.time as u64),
+                            end_time: "".to_string(),
+                        })
+                        .collect();
                     artist = data.artist;
+                    for i in 0..chapters.len() - 1 {
+                        chapters[i].end_time = chapters[i + 1].start_time.clone();
+                    }
+                    let last = chapters.len() - 1;
+                    chapters[last].end_time = secs_to_hms(playback_duration);
                 }
                 LibMpvEventMessage::PlaybackPause => {
                     playback_start_offset += playback_start.elapsed()?.as_secs_f64();

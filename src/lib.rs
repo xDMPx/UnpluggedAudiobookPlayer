@@ -147,12 +147,38 @@ pub fn save_path_to_config(path: &str) {
     }
 }
 
-#[cfg(not(any(target_os = "linux")))]
+#[cfg(target_os = "windows")]
+fn load_path_from_config() -> Option<String> {
+    let config_file_path =
+        std::env::var("APPDATA").map(|path| format!("{path}/{}/config", env!("CARGO_PKG_NAME")));
+    if let Ok(path) = config_file_path {
+        if std::path::PathBuf::from(&path).is_file() {
+            return std::fs::read_to_string(path).ok();
+        }
+    }
+
+    None
+}
+
+#[cfg(target_os = "windows")]
+pub fn save_path_to_config(path: &str) {
+    let config_dir_path =
+        std::env::var("APPDATA").map(|path| format!("{path}/{}", env!("CARGO_PKG_NAME")));
+    if let Ok(dir_path) = config_dir_path {
+        if !std::path::PathBuf::from(&dir_path).is_dir() {
+            std::fs::create_dir(dir_path.clone()).unwrap();
+        }
+        let config_file_path = format!("{dir_path}/config");
+        std::fs::write(config_file_path, path).unwrap();
+    }
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
 fn load_path_from_config() -> Option<String> {
     std::fs::read_to_string("last.txt").ok()
 }
 
-#[cfg(not(any(target_os = "linux")))]
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
 pub fn save_path_to_config(path: &str) {
     let mut file = std::fs::File::create(format!("last.txt")).unwrap();
     file.write_all(path.as_bytes()).unwrap();

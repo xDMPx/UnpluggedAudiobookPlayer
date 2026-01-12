@@ -68,26 +68,33 @@ pub fn process_args() -> Result<Vec<ProgramOption>, UAPlayerError> {
     let mut options = vec![];
     let mut args: Vec<String> = std::env::args().skip(1).collect();
 
-    let last_arg = args
+    let mut last_arg = args
         .pop()
         .or_else(|| load_path_from_config())
         .ok_or(UAPlayerError::InvalidOptionsStructure)?;
-    if last_arg != "--help" {
-        let file_path = last_arg;
-        let abs_file_path = std::path::absolute(&file_path)?;
-        if !abs_file_path.try_exists()? {
-            return Err(UAPlayerError::InvalidFile);
-        }
-        if !is_audiofile(&abs_file_path) {
-            return Err(UAPlayerError::InvalidFile);
-        }
 
-        options.push(ProgramOption::PATH(
-            abs_file_path.to_string_lossy().to_string(),
-        ));
-    } else {
-        args.push(last_arg);
+    if last_arg == "--help" {
+        options.push(ProgramOption::PrintHelp);
+        return Ok(options);
     }
+
+    if last_arg.starts_with("--") {
+        args.push(last_arg);
+        last_arg = load_path_from_config().ok_or(UAPlayerError::InvalidOptionsStructure)?;
+    }
+
+    let file_path = last_arg;
+    let abs_file_path = std::path::absolute(&file_path)?;
+    if !abs_file_path.try_exists()? {
+        return Err(UAPlayerError::InvalidFile);
+    }
+    if !is_audiofile(&abs_file_path) {
+        return Err(UAPlayerError::InvalidFile);
+    }
+
+    options.push(ProgramOption::PATH(
+        abs_file_path.to_string_lossy().to_string(),
+    ));
 
     for arg in args {
         let arg = match arg.as_str() {
@@ -140,12 +147,12 @@ pub fn save_path_to_config(path: &str) {
     }
 }
 
-#[cfg(not(target_os = "linux"))]
-fn load_path_from_config2() -> Option<String> {
+#[cfg(not(any(target_os = "linux")))]
+fn load_path_from_config() -> Option<String> {
     std::fs::read_to_string("last.txt").ok()
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux")))]
 pub fn save_path_to_config(path: &str) {
     let mut file = std::fs::File::create(format!("last.txt")).unwrap();
     file.write_all(path.as_bytes()).unwrap();

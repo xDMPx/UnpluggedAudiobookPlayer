@@ -105,6 +105,7 @@ pub fn tui(
     let mut title = String::new();
     let mut artist: Option<String> = None;
     let mut chapter: Option<String> = None;
+    let mut chapter_num: usize = 0;
     let mut chapters: Vec<Chapter> = vec![];
     let mut terminal = ratatui::init();
 
@@ -197,12 +198,16 @@ pub fn tui(
             }
             TuiState::Chapters => {
                 let mut to_draw = "".to_string();
-                chapters.iter().for_each(|x| {
+                chapters.iter().enumerate().for_each(|(i, x)| {
+                    if i == chapter_num {
+                        to_draw.push_str("* ")
+                    };
                     to_draw.push_str(&format!(
                         "{} || {} - {}\n",
                         x.title, x.start_time, x.end_time
                     ));
                 });
+
                 draw(
                     &mut terminal,
                     &to_draw,
@@ -400,7 +405,8 @@ pub fn tui(
                     playback_duration = data.duration.floor() as u64;
                     playback_volume = data.volume;
                     title = data.media_title;
-                    chapter = data.chapter;
+                    chapter = data.chapter.0;
+                    chapter_num = data.chapter.1;
                     chapters = data
                         .chapters
                         .iter()
@@ -433,7 +439,8 @@ pub fn tui(
                     playback_start_offset = pos;
                 }
                 LibMpvEventMessage::ChapterUpdate(chap) => {
-                    chapter = Some(chap);
+                    chapter = Some(chap.0);
+                    chapter_num = chap.1;
                 }
                 LibMpvEventMessage::Quit => break,
             }

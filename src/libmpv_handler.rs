@@ -24,7 +24,7 @@ pub enum LibMpvEventMessage {
     FileLoaded(FileLoadedData),
     VolumeUpdate(i64),
     PositionUpdate(f64),
-    ChapterUpdate(String),
+    ChapterUpdate((String, usize)),
     Quit,
 }
 
@@ -35,7 +35,7 @@ pub struct FileLoadedData {
     pub album: Option<String>,
     pub duration: f64,
     pub volume: i64,
-    pub chapter: Option<String>,
+    pub chapter: (Option<String>, usize),
     pub chapters: Vec<Chapter>,
 }
 
@@ -146,8 +146,13 @@ impl LibMpvHandler {
                         if i >= 0 {
                             if let Some(chapter) = self.chapters.get(i as usize) {
                                 let chapter = chapter.title.clone();
-                                tui_s.send(LibMpvEventMessage::ChapterUpdate(chapter.clone()))?;
-                                mc_os_s.send(LibMpvEventMessage::ChapterUpdate(chapter))?;
+                                tui_s.send(LibMpvEventMessage::ChapterUpdate((
+                                    chapter.clone(),
+                                    i as usize,
+                                )))?;
+                                mc_os_s.send(LibMpvEventMessage::ChapterUpdate((
+                                    chapter, i as usize,
+                                )))?;
                             }
                         }
                     }
@@ -166,14 +171,14 @@ impl LibMpvHandler {
                         self.fech_chapters()?;
                         let chapter = {
                             if self.chapters.len() > 0 {
-                                let chapter = self.mpv.get_property::<i64>("chapter")?;
-                                if let Some(chapter) = self.chapters.get(chapter as usize) {
-                                    Some(chapter.title.clone())
+                                let chapter_num = self.mpv.get_property::<i64>("chapter")?;
+                                if let Some(chapter) = self.chapters.get(chapter_num as usize) {
+                                    (Some(chapter.title.clone()), chapter_num as usize)
                                 } else {
-                                    None
+                                    (None, 0)
                                 }
                             } else {
-                                None
+                                (None, 0)
                             }
                         };
                         let volume = self.mpv.get_property::<i64>("volume")?;

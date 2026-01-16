@@ -69,6 +69,14 @@ impl Keybindings {
                 (TuiCommand::PlayPause, Some("play-pause")),
             ),
             (
+                KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE),
+                (TuiCommand::Scroll(1), Some("scroll +1")),
+            ),
+            (
+                KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE),
+                (TuiCommand::Scroll(-1), Some("scroll -1")),
+            ),
+            (
                 KeyEvent::new(KeyCode::Char(':'), KeyModifiers::NONE),
                 (TuiCommand::EnterCommandMode(true), None),
             ),

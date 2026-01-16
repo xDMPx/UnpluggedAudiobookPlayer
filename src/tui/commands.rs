@@ -12,6 +12,7 @@ pub enum TuiCommand {
     EnterCommandMode(bool),
     PauseAfter(u64),
     QuitAfter(u64),
+    Scroll(i16),
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -41,6 +41,7 @@ pub fn tui(
     let mut chapters: Vec<Chapter> = vec![];
     let mut terminal = ratatui::init();
     let mut scroll: u16 = 0;
+    let mut scroll_to_center: bool = false;
 
     let mut playback_start = std::time::SystemTime::now();
     let mut playback_start_offset = 0.0;
@@ -127,7 +128,8 @@ pub fn tui(
                         Some(&command_error)
                     },
                     timer_text.as_deref(),
-                    0,
+                    &mut 0,
+                    false,
                 )?;
             }
             TuiState::Chapters => {
@@ -157,8 +159,10 @@ pub fn tui(
                         Some(&command_error)
                     },
                     timer_text.as_deref(),
-                    scroll,
+                    &mut scroll,
+                    scroll_to_center,
                 )?;
+                scroll_to_center = false;
             }
             TuiState::Help => {
                 let min_width = 12;
@@ -180,7 +184,8 @@ pub fn tui(
                         Some(&command_error)
                     },
                     timer_text.as_deref(),
-                    1,
+                    &mut 0,
+                    false,
                 )?;
             }
         }
@@ -273,6 +278,7 @@ pub fn tui(
                         match command {
                             TuiCommand::State(state) => {
                                 tui_state = state.clone();
+                                scroll_to_center = true;
                             }
                             TuiCommand::Quit => {
                                 libmpv_s.send(LibMpvMessage::Quit)?;
@@ -421,14 +427,26 @@ pub fn draw(
     cursor_position: u16,
     error: Option<&str>,
     timer_text: Option<&str>,
-    scroll: u16,
+    scroll: &mut u16,
+    scroll_to_center: bool,
 ) -> Result<(), UAPlayerError> {
     terminal.draw(|f| {
         let area = f.area();
         let block = Block::default().title("UAP").borders(Borders::ALL);
         let block = block.title_alignment(ratatui::layout::Alignment::Center);
+        if scroll_to_center {
+            if let Some((i, _)) = text.lines().enumerate().find(|(_, l)| l.starts_with('*')) {
+                let i = i as u16;
+                let inner = block.inner(f.area());
+                if i > (inner.height / 2) {
+                    *scroll = i - (inner.height / 2);
+                } else {
+                    *scroll = 0;
+                }
+            }
+        }
         let text = ratatui::widgets::Paragraph::new(text);
-        let text = text.scroll((scroll, 0));
+        let text = text.scroll((*scroll, 0));
         let inner = block.inner(f.area());
         f.render_widget(block, area);
         f.render_widget(text, inner);
